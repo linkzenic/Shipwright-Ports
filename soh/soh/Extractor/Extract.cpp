@@ -6,7 +6,9 @@
 #endif
 #include "Extract.h"
 #include "TorchExtract.h"
+#if !defined(__IOS__)
 #include "portable-file-dialogs.h"
+#endif
 #include "spdlog/spdlog.h"
 #include <ship/utils/binarytools/BitConverter.h>
 #include "soh/ShipUtils.h"
@@ -271,6 +273,20 @@ void Extractor::GetRoms(std::vector<std::string>& roms) {
     // if (h != nullptr) {
     //    CloseHandle(h);
     //}
+#elif defined(__IOS__)
+    std::error_code error;
+    std::filesystem::directory_iterator iterator(mSearchPath, error);
+    const std::filesystem::directory_iterator end;
+    while (!error && iterator != end) {
+        std::error_code entryError;
+        if (!iterator->is_directory(entryError) && !entryError) {
+            const auto extension = iterator->path().extension();
+            if (extension == ".n64" || extension == ".z64" || extension == ".v64") {
+                roms.push_back(iterator->path().string());
+            }
+        }
+        iterator.increment(error);
+    }
 #elif unix
     // Open the directory of the app.
     DIR* d = opendir(mSearchPath.c_str());
@@ -377,6 +393,9 @@ bool Extractor::GetRomPathFromBox() {
         return false;
     }
     mCurrentRomPath = androidPickedPath;
+#elif defined(__IOS__)
+    // Apple mobile imports ROMs through Files or the local-network transfer service.
+    return false;
 #else
     if (!pfd::settings::available()) {
         std::string msg =

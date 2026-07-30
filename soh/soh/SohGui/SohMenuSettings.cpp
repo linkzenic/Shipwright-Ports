@@ -15,6 +15,15 @@
 #include <SDL2/SDL.h>
 #include "soh/Enhancements/controls/TouchHudBindings.h"
 #endif
+#if defined(__IOS__)
+#include "ios/SOHiCloudSync.h"
+#endif
+#if defined(__IOS__) && !defined(__TVOS__)
+#include "ios/SOHiOSTouchControls.h"
+#endif
+#ifdef __TVOS__
+#include "ios/SOHTVOSFileServer.h"
+#endif
 
 extern "C" {
 #include "include/z64audio.h"
@@ -67,13 +76,15 @@ static const std::map<int32_t, const char*> bootSequenceLabels = {
     { BOOTSEQUENCE_WARPPOINT, "Warp Point" },
 };
 
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || (defined(__IOS__) && !defined(__TVOS__))
 static const std::map<int32_t, const char*> touchFaceButtonLayoutMap = {
     { 0, "ABXY (Nintendo)" },
     { 1, "BAYX (Xbox)" },
     { 2, "GC Layout" },
 };
+#endif
 
+#ifdef __ANDROID__
 static const std::map<int32_t, const char*> touchStyleMap = {
     { 0, "Classic" }, { 1, "N64" }, { 2, "GameCube" }, { 3, "Modern" },
 };
@@ -140,7 +151,6 @@ static void EditAndroidIntegratedTouch() {
     if (env->ExceptionCheck()) env->ExceptionClear();
     env->DeleteLocalRef(type); env->DeleteLocalRef(activity);
 }
-
 static void SetAndroidTouchControlsDisabled(bool disabled) {
     JNIEnv* env = (JNIEnv*)SDL_AndroidGetJNIEnv();
     jobject activity = (jobject)SDL_AndroidGetActivity();
@@ -368,7 +378,7 @@ void SohMenu::AddMenuSettings() {
         .RaceDisable(false)
         .Callback([](WidgetInfo& info) { OpenAndroidDataFolderChooser(); })
         .Options(ButtonOptions().Tooltip("Choose where Android stores saves, mods, settings, and support files."));
-#else
+#elif !defined(__IOS__)
     AddWidget(path, "Open App Files Folder", WIDGET_BUTTON)
         .RaceDisable(false)
         .Callback([](WidgetInfo& info) {
@@ -376,6 +386,60 @@ void SohMenu::AddMenuSettings() {
             SDL_OpenURL(std::string("file:///" + std::filesystem::absolute(filesPath).string()).c_str());
         })
         .Options(ButtonOptions().Tooltip("Opens the folder that contains the save and mods folders, etc."));
+#endif
+#if defined(__IOS__)
+    AddWidget(path, "iCloud Save Sync", WIDGET_SEPARATOR_TEXT);
+    AddWidget(path, "Sync Saves with iCloud", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_SETTING("iCloudSync.Saves"))
+        .RaceDisable(false)
+        .Callback([](WidgetInfo& info) {
+            if (CVarGetInteger(CVAR_SETTING("iCloudSync.Saves"), 0)) {
+                SOHiCloudSync_SyncNow();
+            }
+        })
+        .Options(CheckboxOptions()
+                     .DefaultValue(0)
+                     .Tooltip("Synchronizes the three save slots and global save through the private iCloud account. "
+                              "Game archives, mods, graphics settings, and touch controls remain local."));
+    AddWidget(path, "Sync Saves Now", WIDGET_BUTTON)
+        .RaceDisable(false)
+        .Callback([](WidgetInfo& info) {
+            if (CVarGetInteger(CVAR_SETTING("iCloudSync.Saves"), 0)) {
+                SOHiCloudSync_SyncNow();
+            }
+        })
+        .Options(ButtonOptions().Tooltip(
+            "Checks for cloud changes and uploads newer local saves. A newer cloud save is loaded safely on restart."));
+    AddWidget(path, "iCloud Save Status", WIDGET_CUSTOM).CustomFunction([](WidgetInfo& info) {
+        char status[384] = {};
+        SOHiCloudSync_GetStatus(status, sizeof(status));
+        ImGui::PushTextWrapPos(ImGui::GetContentRegionAvail().x);
+        if (CVarGetInteger(CVAR_SETTING("iCloudSync.Saves"), 0)) {
+            ImGui::TextUnformatted(status);
+        } else {
+            ImGui::TextUnformatted("iCloud save sync is off.");
+        }
+        ImGui::PopTextWrapPos();
+    });
+#endif
+#if defined(__TVOS__)
+    AddWidget(path, "Apple TV File Transfer", WIDGET_SEPARATOR_TEXT);
+    AddWidget(path, "File Transfer Status", WIDGET_CUSTOM).CustomFunction([](WidgetInfo& info) {
+        char status[512] = {};
+        SOHTVOSFileServer_GetStatus(status, sizeof(status));
+        ImGui::PushTextWrapPos(ImGui::GetContentRegionAvail().x);
+        ImGui::TextUnformatted(status);
+        ImGui::PopTextWrapPos();
+    });
+    AddWidget(path, "Start File Transfer", WIDGET_BUTTON)
+        .RaceDisable(false)
+        .Callback([](WidgetInfo& info) { SOHTVOSFileServer_Start(); })
+        .Options(ButtonOptions().Tooltip(
+            "Starts a private web page for uploading game archives, legal ROMs, and mods from your home network."));
+    AddWidget(path, "Stop File Transfer", WIDGET_BUTTON)
+        .RaceDisable(false)
+        .Callback([](WidgetInfo& info) { SOHTVOSFileServer_Stop(); })
+        .Options(ButtonOptions().Tooltip("Stops the local-network upload page."));
 #endif
 
     AddWidget(path, "Boot", WIDGET_SEPARATOR_TEXT);
@@ -443,8 +507,8 @@ void SohMenu::AddMenuSettings() {
 
         CVarSliderFloat("Menu Scale: %.2fx", CVAR_SETTING("ImGuiScale.Value"),
                         FloatSliderOptions()
-                            .Min(0.65f)
-                            .Max(2.5f)
+                            .Min(minImGuiScale)
+                            .Max(maxImGuiScale)
                             .Step(0.05f)
                             .DefaultValue(1.0f)
                             .Format("%.2fx")

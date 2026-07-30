@@ -453,6 +453,13 @@ _packages
 */extract_assets_cmake*
 /build*
 
+# Apple build and local distribution artifacts
+/dist/
+*.ipa
+*.mobileprovision
+*.p12
+*.cer
+
 soh/src/boot/build.c
 soh/properties.h
 

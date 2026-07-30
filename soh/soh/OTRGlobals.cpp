@@ -61,6 +61,9 @@ static int sAimingGraceFrames = 0;
 
 #include <fast/Fast3dGui.h>
 #include <fast/debug/GfxDebugger.h>
+#ifdef __TVOS__
+#include "ios/SOHTVOSFileServer.h"
+#endif
 
 #if not defined(__SWITCH__) && not defined(__WIIU__)
 #include "Extractor/Extract.h"
@@ -420,6 +423,12 @@ static bool RemoveArchiveAcrossAppDirs(const std::string& fileName) {
 }
 
 void OTRGlobals::RunExtract(int argc, char* argv[]) {
+#if defined(__TVOS__)
+    // The extractor runs before BootCommands_Init. Start the transfer service here
+    // so the no-O2R screen can immediately show a usable upload address.
+    SOHTVOSFileServer_Start();
+#endif
+
     bool extractDone = false;
     ExtractSteps extractStep = ES_PORT_ARCHIVE;
     WindowsSteps windowsStep = WS_TEMP;
@@ -662,9 +671,15 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                             std::filesystem::exists(Ship::Context::LocateFileAcrossAppDirs("oot.o2r", appShortName));
 
                         if (!ootO2RExists) {
+#if defined(__TVOS__)
+                            // Apple TV has no Files app. Scan Documents immediately,
+                            // then show the network transfer screen if no ROM is present.
+                            promptStep = PS_LOCAL;
+#else
                             SohGui::RegisterPopup(
                                 "No O2R Files", "No O2R files found. Generate one now?", "Yes", "No",
                                 [&]() { promptStep = PS_LOCAL; }, [&]() { exit(0); });
+#endif
                         } else {
                             extractStep = ES_VERIFY;
                         }
@@ -679,18 +694,42 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                             extract.GetRoms(args);
                         }
                         if (!args.empty()) {
+#if defined(__TVOS__)
+                            // Process ROMs uploaded to Documents without a desktop-style
+                            // confirmation dialog on the next launch or rescan.
+                            promptStep = PS_WAIT;
+                            extractStep = ES_EXTRACT_ARGS;
+#else
                             promptStep = PS_WAIT;
                             SohGui::RegisterPopup(
                                 "ROMs found", "ROMs found in application directory. Would you like to process them?",
                                 "Yes", "No", [&]() { extractStep = ES_EXTRACT_ARGS; },
                                 [&]() { promptStep = PS_FIRST; });
+#endif
                         } else {
                             promptStep = PS_FIRST;
                         }
                         continue;
                     }
                     case PS_FIRST: {
-#ifndef __ANDROID__
+#if defined(__TVOS__)
+                        char transferStatus[512] = {};
+                        SOHTVOSFileServer_GetStatus(transferStatus, sizeof(transferStatus));
+                        promptStep = PS_WAIT;
+                        SohGui::RegisterPopup(
+                            "Transfer Game Data",
+                            std::string("On a phone or computer on the same network:\n") + transferStatus +
+                                "\n\nUpload oot.o2r, oot-mq.o2r, or a legally acquired ROM, then choose Rescan.",
+                            "Rescan", "Exit", [&]() { promptStep = PS_LOCAL; }, [&]() { exit(0); });
+                        continue;
+#elif defined(__IOS__)
+                        promptStep = PS_WAIT;
+                        SohGui::RegisterPopup(
+                            "Import ROM in Files",
+                            "Copy your legally acquired ROM into Files > Ship of Harkinian, then choose Rescan.",
+                            "Rescan", "Exit", [&]() { promptStep = PS_LOCAL; }, [&]() { exit(0); });
+                        continue;
+#elif !defined(__ANDROID__)
                         if (!extract.ManuallySearchForRomMatchingType(RomSearchMode::Both)) {
                             promptStep = PS_FILE_CHECK;
                             continue;
@@ -1069,7 +1108,7 @@ void OTRGlobals::ScaleImGui() {
         CVarSetFloat(CVAR_SETTING("ImGuiScale.Value"), scale);
     }
 
-    scale = std::clamp(scale, 0.65f, 2.5f);
+    scale = std::clamp(scale, minImGuiScale, maxImGuiScale);
     if (scale == previousImGuiScale) {
         return;
     }
@@ -1993,6 +2032,9 @@ ImFont* OTRGlobals::CreateFontWithSize(float size, std::string fontPath, bool is
         fontCfg.OversampleH = fontCfg.OversampleV = 1;
         fontCfg.PixelSnapH = true;
         fontCfg.SizePixels = size;
+#if defined(__IOS__)
+        fontCfg.RasterizerDensity = 3.0f;
+#endif
         font = mImGuiIo->Fonts->AddFontDefault(&fontCfg);
     } else {
         auto initData = std::make_shared<Ship::ResourceInitData>();
@@ -2004,6 +2046,11 @@ ImFont* OTRGlobals::CreateFontWithSize(float size, std::string fontPath, bool is
             Ship::Context::GetRawInstance()->GetResourceManager()->LoadResource(fontPath, false, initData));
         ImFontConfig fontConf;
         fontConf.FontDataOwnedByAtlas = false;
+#if defined(__IOS__)
+        // Keep the full Japanese glyph range at its existing density to avoid
+        // an excessively large atlas; the Latin menu fonts use Retina density.
+        fontConf.RasterizerDensity = isJapaneseFont ? 1.0f : 3.0f;
+#endif
         const ImWchar* glyph_ranges = isJapaneseFont ? mImGuiIo->Fonts->GetGlyphRangesJapanese() : nullptr;
         font = mImGuiIo->Fonts->AddFontFromMemoryTTF(fontData->Data, static_cast<int>(fontData->DataSize), size,
                                                      &fontConf, glyph_ranges);
@@ -2015,6 +2062,9 @@ ImFont* OTRGlobals::CreateFontWithSize(float size, std::string fontPath, bool is
     iconsConfig.MergeMode = true;
     iconsConfig.PixelSnapH = true;
     iconsConfig.GlyphMinAdvanceX = iconFontSize;
+#if defined(__IOS__)
+    iconsConfig.RasterizerDensity = 3.0f;
+#endif
     mImGuiIo->Fonts->AddFontFromMemoryCompressedBase85TTF(fontawesome_compressed_data_base85, iconFontSize,
                                                           &iconsConfig, sIconsRanges);
     return font;

@@ -43,8 +43,9 @@ void Main_LogSystemHeap(void) {
     osSyncPrintf(VT_RST);
 }
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__IOS__)
 int SDL_main(int argc, char* argv[]) {
+#ifdef _WIN32
     AllocConsole();
     (void)freopen("CONIN$", "r", stdin);
     (void)freopen("CONOUT$", "w", stdout);
@@ -56,6 +57,7 @@ int SDL_main(int argc, char* argv[]) {
     setlocale(LC_ALL, ".UTF8");
     // Keep '.' as the decimal point, user locale may use ','
     setlocale(LC_NUMERIC, "C");
+#endif
 
 #elif defined(__ANDROID__)
 extern int Android_WaitForSetup(void);

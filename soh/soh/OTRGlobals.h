@@ -45,6 +45,15 @@ class Context;
 
 struct ImFont;
 
+#if defined(__IOS__)
+const float minImGuiScale = 0.35f;
+const float maxImGuiScale = 1.0f;
+#else
+const float minImGuiScale = 0.65f;
+const float maxImGuiScale = 2.5f;
+#endif
+const float imguiScaleOptionToValue[4] = { 0.75f, 1.0f, 1.5f, 2.0f };
+
 class OTRGlobals {
   public:
     static OTRGlobals* Instance;

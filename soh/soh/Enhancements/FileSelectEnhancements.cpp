@@ -46,21 +46,21 @@ std::array<std::string, LANGUAGE_MAX> RandomizerSettingsMenuText[RSM_MAX] = {
     },
     { // English
       "No randomizer seed loaded.\nPlease generate one first"
-#if defined(__WIIU__) || defined(__SWITCH__)
+#if defined(__WIIU__) || defined(__SWITCH__) || defined(__IOS__)
       ".",
 #else
       ",\nor drop a spoiler log on the game window.",
 #endif
       // German
       "Kein Randomizer Seed gefunden.\nBitte generiere zuerst einen"
-#if defined(__WIIU__) || defined(__SWITCH__)
+#if defined(__WIIU__) || defined(__SWITCH__) || defined(__IOS__)
       ".",
 #else
       ",\noder ziehe ein Spoiler Log\nauf das Spielfenster.",
 #endif
       // French
       "Aucune Seed de Randomizer actuellement disponible.\nGénérez-en une dans les \"Randomizer Settings\""
-#if (defined(__WIIU__) || defined(__SWITCH__))
+#if defined(__WIIU__) || defined(__SWITCH__) || defined(__IOS__)
       "."
 #else
       "\nou glissez un spoilerlog sur la fenêtre du jeu."
