@@ -5,8 +5,12 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP_PATH="${1:-$ROOT/build-ios-device/soh/Release-iphoneos/Ship of Harkinian.app}"
 OUTPUT_PATH="${2:-$ROOT/dist/Ship-of-Harkinian-iOS-unsigned.ipa}"
 
+if [[ "$OUTPUT_PATH" != /* ]]; then
+    OUTPUT_PATH="$(pwd)/$OUTPUT_PATH"
+fi
+
 if [ ! -d "$APP_PATH" ]; then
-    echo "Missing iPhone app bundle: $APP_PATH" >&2
+    echo "Missing Apple app bundle: $APP_PATH" >&2
     exit 1
 fi
 

@@ -36,13 +36,19 @@ case "$MODE" in
         ;;
     --tvos-device)
         BUILD_DIR="$ROOT/build-tvos-device"
+        APP_PATH="$BUILD_DIR/soh/Release-appletvos/Ship of Harkinian.app"
         set -- cmake --build "$BUILD_DIR" --target soh --config Release -- \
             -destination generic/platform=tvOS
         if [ -z "${DEVELOPMENT_TEAM:-}" ]; then
             set -- "$@" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
         fi
         "$@"
-        echo "tvOS device app: $BUILD_DIR/soh/Release-appletvos/Ship of Harkinian.app"
+        if [ -z "${DEVELOPMENT_TEAM:-}" ]; then
+            codesign --remove-signature "$APP_PATH" 2>/dev/null || true
+            rm -rf "$APP_PATH/_CodeSignature"
+            rm -f "$APP_PATH/embedded.mobileprovision"
+        fi
+        echo "tvOS device app: $APP_PATH"
         ;;
     *)
         echo "Usage: scripts/build-ios.sh [--simulator|--device|--tvos-simulator|--tvos-device]" >&2
