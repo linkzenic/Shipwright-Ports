@@ -260,3 +260,32 @@ improvement pass authorized on 2026-07-29.
   Linkzenic SOH option set.
 - **Current decision:** Keep the improved ImGui controller navigation for now;
   it is sufficient for ongoing device testing.
+
+### TVOS-012: Top settings categories are unreachable
+
+- **Area:** tvOS / settings UI / controller navigation
+- **Status:** Fixed and validated on physical Apple TV
+- **Observed:** Controller navigation could move between settings content and
+  the left section list, but could not focus the top category tabs such as
+  Enhancements, Randomizer, and Network.
+- **2026-07-29 change:** Replaced the two-state tvOS menu navigation with
+  explicit content, sidebar, and header regions. Press Up from the first
+  sidebar item to enter the top tabs, Left/Right to change category, and
+  Down/A to return to that category's sidebar. L/R shoulder shortcuts remain
+  available.
+- **2026-07-29 validation:** Confirmed on the physical Apple TV that the top
+  categories are reachable and navigation is substantially improved.
+
+### IOS-013: Performance does not recover after app switching
+
+- **Platforms:** iOS, iPadOS, tvOS
+- **Status:** Fixed and validated on physical iPhone and Apple TV
+- **Observed:** After switching to another application and returning, gameplay
+  runs extremely slowly and does not recover.
+- **2026-07-29 change:** The shared Apple backend now stops producing Metal
+  frames while the application is backgrounded, resets frame pacing and
+  drawable dimensions when it becomes interactive again, and explicitly
+  suspends/restarts CoreAudio while discarding stale queued samples.
+- **2026-07-29 validation:** App switching and foreground recovery were tested
+  on the physical iPhone and Apple TV; performance now recovers normally on
+  both platforms.
