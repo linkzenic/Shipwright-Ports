@@ -1,5 +1,13 @@
 include(FetchContent)
 
+# Public Apple builds must not embed the local checkout path in diagnostics,
+# debug metadata, or __FILE__ strings.
+add_compile_options(
+    "-ffile-prefix-map=${CMAKE_SOURCE_DIR}=."
+    "-fmacro-prefix-map=${CMAKE_SOURCE_DIR}=."
+    "-fdebug-prefix-map=${CMAKE_SOURCE_DIR}=."
+)
+
 # CoreMotion is not available in the tvOS SDK. SDL otherwise enables its
 # CoreMotion sensor backend merely because this is an Apple mobile target.
 if(CMAKE_SYSTEM_NAME STREQUAL "tvOS")
