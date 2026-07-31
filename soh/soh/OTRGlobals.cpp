@@ -461,6 +461,23 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
     std::string dataPath = std::filesystem::absolute(Ship::Context::GetAppDirectoryPath(appShortName)).string();
     std::string file;
 
+#if defined(__IOS__)
+    const auto hasExtractorAssets = [](const std::filesystem::path& root) {
+        std::error_code error;
+        return std::filesystem::is_regular_file(root / "assets/Config_N64_NTSC_10.xml", error) && !error &&
+               std::filesystem::is_regular_file(root / "assets/TexturePool.xml", error) && !error &&
+               std::filesystem::is_directory(root / "assets/xml", error) && !error;
+    };
+
+    // Accept a complete resource set in any supported application location if
+    // the native bundle path is unavailable in an unusual install environment.
+    const std::string locatedAssetsPath = Ship::Context::LocateFileAcrossAppDirs("assets", appShortName);
+    const std::filesystem::path locatedInstallPath = std::filesystem::path(locatedAssetsPath).parent_path();
+    if (!hasExtractorAssets(installPath) && hasExtractorAssets(locatedInstallPath)) {
+        installPath = locatedInstallPath.string();
+    }
+#endif
+
 #if defined(__SWITCH__)
     SohGui::RegisterPopup("Outdated ROM Archives",
                           "\x1b[2;2HYou've launched the Ship with an old ROM O2R file."
@@ -476,10 +493,14 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
     OSFatal();
 #endif
 
+#if defined(__IOS__)
+    if (!hasExtractorAssets(installPath)) {
+#else
     if (!std::filesystem::exists(installPath + "/assets")) {
+#endif
         SohGui::RegisterPopup("Extractor assets not found",
-                              "No O2R files found. Missing 'assets/' folder needed to generate OTR file.\nPlease "
-                              "re-extract them from the download or.\n\nExiting...",
+                              "The extraction resources could not be found in the app bundle.\nPlease reinstall the "
+                              "complete IPA and try again.\n\nExiting...",
                               "OK", "", [&]() { exit(1); });
     } else if (shouldRegen) {
         if (RemoveArchiveAcrossAppDirs("oot.o2r") && RemoveArchiveAcrossAppDirs("oot-mq.o2r")) {

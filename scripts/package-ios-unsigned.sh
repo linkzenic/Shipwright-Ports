@@ -28,6 +28,27 @@ codesign --remove-signature "$PUBLIC_APP" 2>/dev/null || true
 rm -rf "$PUBLIC_APP/_CodeSignature"
 rm -f "$PUBLIC_APP/embedded.mobileprovision"
 
+REQUIRED_BUNDLE_ITEMS=(
+    "Ship of Harkinian"
+    "Info.plist"
+    "soh.o2r"
+    "assets/Config_N64_NTSC_10.xml"
+    "assets/TexturePool.xml"
+    "assets/xml"
+)
+
+for item in "${REQUIRED_BUNDLE_ITEMS[@]}"; do
+    if [ ! -e "$PUBLIC_APP/$item" ]; then
+        echo "Refusing to package an incomplete app bundle: missing $item" >&2
+        exit 1
+    fi
+done
+
+if ! find "$PUBLIC_APP/assets/xml" -type f -print -quit | grep -q .; then
+    echo "Refusing to package an incomplete app bundle: assets/xml is empty" >&2
+    exit 1
+fi
+
 if strings "$PUBLIC_APP/Ship of Harkinian" | grep -q "/Users/"; then
     echo "Refusing to package an executable containing a local user path." >&2
     exit 1
