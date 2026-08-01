@@ -110,7 +110,7 @@ The normal Ship extraction code creates the local game archive in the same
 Documents directory. Saves and configuration remain visible through Files for
 backup and transfer.
 
-## Importing game data and mods on Apple TV
+## Importing game data, mods, and saves on Apple TV
 
 Apple TV has no Files-app document workflow. The tvOS build therefore starts a
 small local transfer server and advertises it with Bonjour:
@@ -120,14 +120,17 @@ small local transfer server and advertises it with Bonjour:
    prompt or under **Settings > General > Local File Transfer**.
 3. On a phone, tablet, or computer connected to the same home network, open
    that address in a browser.
-4. Choose **Game Data** for `.o2r`, `.otr`, `.z64`, `.n64`, or `.v64` files, or
-   choose **Mods** for mod archives.
-5. Return to the game and choose **Rescan**.
+4. Choose **Game Data** for `.o2r`, `.otr`, `.z64`, `.n64`, or `.v64` files;
+   **Mods** for mod archives; or **Save Files** for `global.sav`, `file1.sav`,
+   `file2.sav`, or `file3.sav`.
+5. Return to the game and choose **Rescan** for game data or mods. A save upload
+   is placed directly in `Save` and queued for iCloud synchronization when that
+   option is enabled.
 
-Uploads are streamed to a temporary file and atomically moved into the app's
-local Documents directory when complete. Game data and mods are not uploaded
-to CloudKit. The transfer server can be stopped and restarted from the SOH
-settings menu.
+Uploads are streamed to a temporary file and atomically moved into the correct
+app directory when complete. Game data and mods are not uploaded to CloudKit;
+the supported save files are queued for the existing private iCloud save sync.
+The transfer server can be stopped and restarted from the SOH settings menu.
 
 ## iCloud save synchronization
 
@@ -189,7 +192,7 @@ archives and platform-specific settings local.
 - `soh/ios/SOHiOSTouchControls.mm` translates the Android SOH touch layout to
   UIKit while retaining the same SDL controller inputs.
 - `soh/ios/SOHTVOSFileServer.mm` provides streamed local-network uploads for
-  Apple TV game data and mods.
+  Apple TV game data, mods, and supported SOH saves.
 - `soh/ios/Info-tvOS.plist.in` defines the Apple TV application bundle.
 - `scripts/configure-ios.sh` generates iOS or tvOS simulator/device projects.
 - `scripts/build-ios.sh` configures and builds the selected target.

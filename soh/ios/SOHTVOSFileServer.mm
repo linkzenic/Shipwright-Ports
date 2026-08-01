@@ -1,4 +1,5 @@
 #import "SOHTVOSFileServer.h"
+#import "SOHiCloudSync.h"
 
 #import <Foundation/Foundation.h>
 #import <Network/Network.h>
@@ -70,11 +71,18 @@ NSString* TransferURL() {
     return result ?: @"http://Apple-TV.local:8080";
 }
 
-bool IsAllowedExtension(NSString* filename) {
+bool IsAllowedGameDataExtension(NSString* filename) {
     static NSSet<NSString*>* allowed = [NSSet setWithArray:@[
         @"o2r", @"otr", @"z64", @"n64", @"v64"
     ]];
     return [allowed containsObject:filename.pathExtension.lowercaseString];
+}
+
+bool IsSupportedSaveFile(NSString* filename) {
+    static NSSet<NSString*>* allowed = [NSSet setWithArray:@[
+        @"global.sav", @"file1.sav", @"file2.sav", @"file3.sav"
+    ]];
+    return [allowed containsObject:filename.lowercaseString];
 }
 
 NSData* HTTPResponse(NSInteger status, NSString* reason, NSString* contentType, NSData* body) {
@@ -104,10 +112,11 @@ NSData* TransferPage() {
          "border-radius:16px}input,select,button{font:inherit;margin:8px 0;padding:12px;border-radius:8px;"
          "border:0}button{background:#168ce5;color:white;font-weight:700}progress{width:100%;height:22px}"
          "#status{white-space:pre-wrap;margin-top:14px;color:#a9d9ff}</style></head><body>"
-         "<h1>Ship of Harkinian</h1><section><p>Upload a game archive, legal ROM, or mod to this Apple TV."
-         " Saves synchronize separately through private iCloud.</p>"
-         "<select id=folder><option value=root>Game data</option><option value=mods>Mod</option></select><br>"
-         "<input id=file type=file multiple accept='.o2r,.otr,.z64,.n64,.v64'><br>"
+         "<h1>Ship of Harkinian</h1><section><p>Upload game data, mods, or SOH save files to this Apple TV."
+         " Save uploads synchronize through private iCloud when iCloud save sync is enabled.</p>"
+         "<select id=folder><option value=root>Game data</option><option value=mods>Mod</option>"
+         "<option value=saves>Save files</option></select><br>"
+         "<input id=file type=file multiple accept='.o2r,.otr,.z64,.n64,.v64,.sav'><br>"
          "<button onclick=uploadFiles()>Upload</button><progress id=progress max=100 value=0></progress>"
          "<div id=status>Ready.</div></section><script>"
          "const fileInput=document.getElementById('file'),folderInput=document.getElementById('folder'),"
@@ -152,6 +161,7 @@ void SendAndClose(nw_connection_t connection, NSData* response) {
 @property(nonatomic, copy) NSString* temporaryPath;
 @property(nonatomic, copy) NSString* destinationPath;
 @property(nonatomic, copy) NSString* displayName;
+@property(nonatomic) BOOL uploadedSave;
 @property(nonatomic) uint64_t contentLength;
 @property(nonatomic) uint64_t receivedLength;
 @property(nonatomic) BOOL headersComplete;
@@ -298,15 +308,31 @@ void SendAndClose(nw_connection_t connection, NSData* response) {
     NSString* category = components[2];
     NSString* decoded = [components[3] stringByRemovingPercentEncoding];
     NSString* filename = decoded.lastPathComponent;
-    if (filename.length == 0 || ![filename isEqualToString:decoded] || !IsAllowedExtension(filename)) {
-        [self fail:@"Allowed files: .o2r, .otr, .z64, .n64, and .v64." status:415];
+    if (filename.length == 0 || ![filename isEqualToString:decoded]) {
+        [self fail:@"Invalid upload filename." status:415];
         return NO;
     }
 
     NSString* directory = DocumentsPath();
     if ([category isEqualToString:@"mods"]) {
+        if (!IsAllowedGameDataExtension(filename)) {
+            [self fail:@"Mods must be .o2r or .otr files." status:415];
+            return NO;
+        }
         directory = [directory stringByAppendingPathComponent:@"mods"];
-    } else if (![category isEqualToString:@"root"]) {
+    } else if ([category isEqualToString:@"saves"]) {
+        if (!IsSupportedSaveFile(filename)) {
+            [self fail:@"Supported saves: global.sav, file1.sav, file2.sav, and file3.sav." status:415];
+            return NO;
+        }
+        directory = [directory stringByAppendingPathComponent:@"Save"];
+        self.uploadedSave = YES;
+    } else if ([category isEqualToString:@"root"]) {
+        if (!IsAllowedGameDataExtension(filename)) {
+            [self fail:@"Game data must be .o2r, .otr, .z64, .n64, or .v64 files." status:415];
+            return NO;
+        }
+    } else {
         [self fail:@"Invalid upload category." status:400];
         return NO;
     }
@@ -388,9 +414,15 @@ void SendAndClose(nw_connection_t connection, NSData* response) {
         return;
     }
 
-    WriteStatus([NSString stringWithFormat:@"%@ uploaded. Choose Rescan in the app.", self.displayName]);
+    if (self.uploadedSave) {
+        SOHiCloudSync_LocalSaveChanged(self.destinationPath.UTF8String);
+    }
+    WriteStatus([NSString stringWithFormat:self.uploadedSave
+        ? @"%@ uploaded and queued for iCloud sync."
+        : @"%@ uploaded. Choose Rescan in the app.", self.displayName]);
     SendAndClose(self.connection, TextResponse(201, @"Created",
-                                               @"Upload complete. Choose Rescan on the Apple TV."));
+        self.uploadedSave ? @"Save uploaded and queued for iCloud sync."
+                          : @"Upload complete. Choose Rescan on the Apple TV."));
 }
 
 - (void)fail:(NSString*)message status:(NSInteger)status {
