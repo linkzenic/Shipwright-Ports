@@ -17,6 +17,7 @@
 #endif
 #if defined(__IOS__)
 #include "ios/SOHiCloudSync.h"
+#include "ios/SOHSaveBridgeSync.h"
 #endif
 #if defined(__IOS__) && !defined(__TVOS__)
 #include "ios/SOHiOSTouchControls.h"
@@ -388,6 +389,37 @@ void SohMenu::AddMenuSettings() {
         .Options(ButtonOptions().Tooltip("Opens the folder that contains the save and mods folders, etc."));
 #endif
 #if defined(__IOS__)
+    AddWidget(path, "Save Bridge", WIDGET_SEPARATOR_TEXT);
+#if !defined(__TVOS__)
+    AddWidget(path, "Save Bridge Pairing", WIDGET_CUSTOM).CustomFunction([](WidgetInfo& info) {
+        static char pairingCode[7] = {};
+        ImGui::TextUnformatted("Enter the six-digit code shown in Linkzenic Save Bridge on your Mac.");
+        ImGui::SetNextItemWidth(140.0f);
+        ImGui::InputText("Pairing Code", pairingCode, sizeof(pairingCode), ImGuiInputTextFlags_CharsDecimal);
+        ImGui::SameLine();
+        if (ImGui::Button("Pair with Save Bridge")) {
+            SOHSaveBridgeSync_Pair(pairingCode);
+        }
+    });
+#endif
+    AddWidget(path, "Sync Saves with Save Bridge", WIDGET_BUTTON)
+        .RaceDisable(false)
+        .Callback([](WidgetInfo& info) { SOHSaveBridgeSync_SyncNow(); })
+        .Options(ButtonOptions().Tooltip(
+            "Finds the paired Mac on your home network and transfers the newer copy of each SOH save file."));
+    AddWidget(path, "Reload Downloaded Saves", WIDGET_BUTTON)
+        .RaceDisable(false)
+        .Callback([](WidgetInfo& info) { SOHSaveBridgeSync_ReloadDownloadedSaves(); })
+        .Options(ButtonOptions().Tooltip(
+            "After Save Bridge downloads newer saves, safely returns to file select without triggering soft-reset autosave."));
+    AddWidget(path, "Save Bridge Status", WIDGET_CUSTOM).CustomFunction([](WidgetInfo& info) {
+        char status[384] = {};
+        SOHSaveBridgeSync_GetStatus(status, sizeof(status));
+        ImGui::PushTextWrapPos(ImGui::GetContentRegionAvail().x);
+        ImGui::TextUnformatted(status);
+        ImGui::PopTextWrapPos();
+    });
+
     AddWidget(path, "iCloud Save Sync", WIDGET_SEPARATOR_TEXT);
     AddWidget(path, "Sync Saves with iCloud", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_SETTING("iCloudSync.Saves"))

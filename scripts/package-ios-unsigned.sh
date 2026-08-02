@@ -28,6 +28,11 @@ codesign --remove-signature "$PUBLIC_APP" 2>/dev/null || true
 rm -rf "$PUBLIC_APP/_CodeSignature"
 rm -f "$PUBLIC_APP/embedded.mobileprovision"
 
+# A public IPA is intentionally unsigned. A later personal sideload signature
+# cannot authorize Linkzenic's private CloudKit container, so prevent the app
+# from attempting that unavailable service at runtime.
+/usr/libexec/PlistBuddy -c 'Set :SOHCloudKitProvisionedBuild false' "$PUBLIC_APP/Info.plist"
+
 REQUIRED_BUNDLE_ITEMS=(
     "Ship of Harkinian"
     "Info.plist"

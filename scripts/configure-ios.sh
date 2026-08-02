@@ -8,19 +8,20 @@ BUNDLE_ID="${BUNDLE_ID:-com.shipofharkinian.ios}"
 SOH_IOS_VERSION="${SOH_IOS_VERSION:-0.1.0}"
 SOH_IOS_BUILD_NUMBER="${SOH_IOS_BUILD_NUMBER:-1}"
 SOH_ICLOUD_CONTAINER_ID="${SOH_ICLOUD_CONTAINER_ID:-iCloud.com.shipofharkinian.shared}"
+SOH_ENABLE_ICLOUD="${SOH_ENABLE_ICLOUD:-ON}"
 
 case "$MODE" in
     --simulator)
         SYSTEM_NAME="iOS"
         IOS_PLATFORM="SIMULATORARM64"
         APPLE_TARGET="ios"
-        BUILD_DIR="$ROOT/build-ios-sim"
+        BUILD_DIR="${IOS_BUILD_DIR:-$ROOT/build-ios-sim}"
         ;;
     --device)
         SYSTEM_NAME="iOS"
         IOS_PLATFORM="OS64"
         APPLE_TARGET="ios"
-        BUILD_DIR="$ROOT/build-ios-device"
+        BUILD_DIR="${IOS_BUILD_DIR:-$ROOT/build-ios-device}"
         ;;
     --tvos-simulator)
         SYSTEM_NAME="tvOS"
@@ -70,6 +71,7 @@ set -- cmake -Wno-unused-cli \
     -DSOH_APPLE_TARGET="$APPLE_TARGET" \
     -DBUNDLE_ID="$BUNDLE_ID" \
     -DSOH_ICLOUD_CONTAINER_ID="$SOH_ICLOUD_CONTAINER_ID" \
+    -DSOH_ENABLE_ICLOUD="$SOH_ENABLE_ICLOUD" \
     -DSOH_IOS_VERSION="$SOH_IOS_VERSION" \
     -DSOH_IOS_BUILD_NUMBER="$SOH_IOS_BUILD_NUMBER"
 

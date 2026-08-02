@@ -141,6 +141,7 @@ list(APPEND soh__ ${CMAKE_CURRENT_SOURCE_DIR}/soh/Enhancements/speechsynthesizer
 
 if(CMAKE_SYSTEM_NAME MATCHES "iOS|tvOS")
     list(APPEND soh__ ${CMAKE_CURRENT_SOURCE_DIR}/ios/SOHiCloudSync.mm)
+    list(APPEND soh__ ${CMAKE_CURRENT_SOURCE_DIR}/ios/SOHSaveBridgeSync.mm)
     if(SOH_APPLE_TARGET STREQUAL "tvos")
         list(APPEND soh__ ${CMAKE_CURRENT_SOURCE_DIR}/ios/SOHTVOSFileServer.mm)
     else()
@@ -286,11 +287,22 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "iOS|tvOS")
     set(SOH_APPLE_TARGET "ios" CACHE STRING "Apple mobile target: ios or tvos")
     set(SOH_ICLOUD_CONTAINER_ID "iCloud.com.shipofharkinian.shared" CACHE STRING
         "Shared CloudKit container for iPhone, iPad, tvOS, and macOS")
-    configure_file(
-        "${CMAKE_CURRENT_SOURCE_DIR}/ios/SOHiOS.entitlements.in"
-        "${CMAKE_CURRENT_BINARY_DIR}/SOHiOS.entitlements"
-        @ONLY
-    )
+    option(SOH_ENABLE_ICLOUD "Enable iCloud entitlements for Apple builds" ON)
+    if(SOH_ENABLE_ICLOUD)
+        set(SOH_CLOUDKIT_PROVISIONED true)
+        configure_file(
+            "${CMAKE_CURRENT_SOURCE_DIR}/ios/SOHiOS.entitlements.in"
+            "${CMAKE_CURRENT_BINARY_DIR}/SOHiOS.entitlements"
+            @ONLY
+        )
+    else()
+        set(SOH_CLOUDKIT_PROVISIONED false)
+        configure_file(
+            "${CMAKE_CURRENT_SOURCE_DIR}/ios/SOHiOSNoCloud.entitlements.in"
+            "${CMAKE_CURRENT_BINARY_DIR}/SOHiOS.entitlements"
+            @ONLY
+        )
+    endif()
     if(SOH_APPLE_TARGET STREQUAL "tvos")
         set(SOH_APPLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/ios/Info-tvOS.plist.in")
         set(SOH_APPLE_DEVICE_FAMILY "3")
@@ -322,9 +334,7 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "iOS|tvOS")
         "$<$<STREQUAL:${SOH_APPLE_TARGET},tvos>:__TVOS__>"
     )
     target_link_libraries(${PROJECT_NAME} PRIVATE "-framework CloudKit")
-    if(SOH_APPLE_TARGET STREQUAL "tvos")
-        target_link_libraries(${PROJECT_NAME} PRIVATE "-framework Network")
-    endif()
+    target_link_libraries(${PROJECT_NAME} PRIVATE "-framework Network")
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set_target_properties(${PROJECT_NAME} PROPERTIES
     OUTPUT_NAME "soh.elf"

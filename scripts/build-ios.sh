@@ -8,12 +8,12 @@ MODE="${1:---simulator}"
 
 case "$MODE" in
     --simulator)
-        BUILD_DIR="$ROOT/build-ios-sim"
+        BUILD_DIR="${IOS_BUILD_DIR:-$ROOT/build-ios-sim}"
         cmake --build "$BUILD_DIR" --target soh --config Release
         echo "Simulator app: $BUILD_DIR/soh/Release-iphonesimulator/Ship of Harkinian.app"
         ;;
     --device)
-        BUILD_DIR="$ROOT/build-ios-device"
+        BUILD_DIR="${IOS_BUILD_DIR:-$ROOT/build-ios-device}"
         APP_PATH="$BUILD_DIR/soh/Release-iphoneos/Ship of Harkinian.app"
         set -- cmake --build "$BUILD_DIR" --target soh --config Release -- \
             -destination generic/platform=iOS

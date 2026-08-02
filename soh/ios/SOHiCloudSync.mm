@@ -38,6 +38,16 @@ void WriteStatus(NSString* status) {
     }
 }
 
+bool IsProvisionedForCloudKit() {
+    NSNumber* provisioned =
+        [NSBundle.mainBundle objectForInfoDictionaryKey:@"SOHCloudKitProvisionedBuild"];
+    if (provisioned != nil && !provisioned.boolValue) {
+        WriteStatus(@"iCloud save sync requires a Linkzenic-provisioned build. Local saves remain available.");
+        return false;
+    }
+    return true;
+}
+
 NSArray<NSString*>* SaveRelativePaths() {
     return @[ @"Save/global.sav", @"Save/file1.sav", @"Save/file2.sav", @"Save/file3.sav" ];
 }
@@ -279,12 +289,18 @@ void ReconcilePaths(NSArray<NSString*>* relativePaths, bool applyCloudDownloads)
 } // namespace
 
 extern "C" void SOHiCloudSync_PrepareSaves(void) {
+    if (!IsProvisionedForCloudKit()) {
+        return;
+    }
     dispatch_sync(SyncQueue(), ^{
         ReconcilePaths(SaveRelativePaths(), true);
     });
 }
 
 extern "C" void SOHiCloudSync_SyncNow(void) {
+    if (!IsProvisionedForCloudKit()) {
+        return;
+    }
     dispatch_async(SyncQueue(), ^{
         ReconcilePaths(SaveRelativePaths(), false);
     });
@@ -292,6 +308,9 @@ extern "C" void SOHiCloudSync_SyncNow(void) {
 
 extern "C" void SOHiCloudSync_LocalSaveChanged(const char* path) {
     if (path == nullptr) {
+        return;
+    }
+    if (!IsProvisionedForCloudKit()) {
         return;
     }
     NSString* absolutePath = [NSString stringWithUTF8String:path];
@@ -307,6 +326,9 @@ extern "C" void SOHiCloudSync_LocalSaveChanged(const char* path) {
 
 extern "C" void SOHiCloudSync_LocalSaveDeleted(const char* path) {
     if (path == nullptr) {
+        return;
+    }
+    if (!IsProvisionedForCloudKit()) {
         return;
     }
     NSString* absolutePath = [NSString stringWithUTF8String:path];

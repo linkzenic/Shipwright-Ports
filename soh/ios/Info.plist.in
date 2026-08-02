@@ -36,9 +36,17 @@
     <key>NSBonjourServices</key>
     <array>
         <string>_soh-transfer._tcp</string>
+        <string>_linkzenic-savebridge._tcp</string>
     </array>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>Ship of Harkinian uses your local network to transfer game data and mods to Apple TV.</string>
+    <string>Ship of Harkinian uses your local network to transfer game data and synchronize saves with Save Bridge.</string>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
+    <key>SOHCloudKitProvisionedBuild</key>
+    <@SOH_CLOUDKIT_PROVISIONED@/>
     <key>LSSupportsOpeningDocumentsInPlace</key>
     <true/>
     <key>UIFileSharingEnabled</key>
