@@ -88,10 +88,10 @@ index 00000000..faa69d08
 +     return SDL_SCANCODE_UNKNOWN;
 + }
 diff --git a/cmake/ios-toolchain-populate.cmake b/cmake/ios-toolchain-populate.cmake
-index eb93fea4..776a8bda 100644
+index eb93fea4..737a4cf7 100644
 --- a/cmake/ios-toolchain-populate.cmake
 +++ b/cmake/ios-toolchain-populate.cmake
-@@ -1,4 +1,12 @@
+@@ -1,4 +1,16 @@
 -set(PLATFORM "OS64COMBINED")
 +if(SOH_APPLE_TARGET STREQUAL "tvos")
 +    if(CMAKE_OSX_SYSROOT MATCHES "simulator")
@@ -100,12 +100,16 @@ index eb93fea4..776a8bda 100644
 +        set(PLATFORM "TVOS")
 +    endif()
 +else()
-+    set(PLATFORM "OS64COMBINED")
++    if(CMAKE_OSX_SYSROOT MATCHES "simulator")
++        set(PLATFORM "SIMULATORARM64")
++    else()
++        set(PLATFORM "OS64")
++    endif()
 +endif()
  include(FetchContent)
  FetchContent_Declare(iostoolchain
      GIT_REPOSITORY https://github.com/leetal/ios-cmake
-@@ -12,4 +20,4 @@ if(NOT iostoolchain_POPULATED)
+@@ -12,4 +24,4 @@ if(NOT iostoolchain_POPULATED)
  endif()
  set(CMAKE_IOS_TOOLCHAIN_FILE ${iostoolchain_SOURCE_DIR}/ios.toolchain.cmake)
  set_property(GLOBAL PROPERTY IOS_TOOLCHAIN_FILE ${CMAKE_IOS_TOOLCHAIN_FILE})
