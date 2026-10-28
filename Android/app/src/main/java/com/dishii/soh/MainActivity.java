@@ -892,9 +892,21 @@ public class MainActivity extends SDLActivity{
 
     @Override
     protected void onPause() {
+        if (integratedTouchView != null) integratedTouchView.suspend();
         super.onPause();
         setItemButtonHeld(false);
         mIsAiming = false;
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (integratedTouchView != null) integratedTouchView.resume();
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (integratedTouchView == null || !integratedTouchView.cancelEditing()) super.onBackPressed();
     }
 
     @Override
@@ -930,6 +942,50 @@ public class MainActivity extends SDLActivity{
     private float rightStickStartX;
     private float rightStickStartY;
     private boolean touchControlsMenuVisible = false;
+    private IntegratedTouchView integratedTouchView;
+    private boolean integratedLookHeld;
+    native int integratedTouchState();
+    native int[] integratedTouchBindings(int mode);
+    native void integratedTouchButton(int mask, boolean down);
+    native void integratedTouchStick(int x, int y);
+    native void integratedTouchReset();
+    native void integratedTouchLayout(float[] anchors, boolean active, boolean naviUtilityIcon);
+
+    public void setIntegratedTouchFromNative(int mode, float scale, float opacity, boolean transparentSticks, boolean floatingRight) {
+        preferences.edit().putInt("integratedTouchMode", Math.max(0, Math.min(3, mode)))
+                .putFloat("integratedTouchScale", scale).putFloat("integratedTouchOpacity", opacity)
+                .putBoolean("touchTransparentSticks", transparentSticks)
+                .putBoolean("touchRightStickFloating", floatingRight).apply();
+        runOnUiThread(this::applyTouchControlsVisibility);
+    }
+    public void editIntegratedTouchFromNative() {
+        runOnUiThread(() -> {
+            if (preferences.getInt("integratedTouchMode", 0) == 0 ||
+                    preferences.getBoolean(PREF_TOUCH_CONTROLS_DISABLED, false)) {
+                Toast.makeText(this, "Select an integrated touch preset and enable touch controls first.", Toast.LENGTH_LONG).show();
+            } else if (integratedTouchView != null) integratedTouchView.startEditing();
+        });
+    }
+    void integratedMenuButton(int mask, boolean down) {
+        int direction = mask == 0x800 ? 0 : mask == 0x400 ? 1 : mask == 0x200 ? 2 :
+                mask == 0x100 ? 3 : mask == 0x8000 ? 4 : mask == 0x4000 ? 5 : -1;
+        if (direction >= 0) nativeMenuNavKey(direction, down);
+    }
+    void integratedLook(float x, float y, boolean active) {
+        if (!active) { integratedLookHeld = false; resetRightTouch(); return; }
+        if (mIsAiming) {
+            if (!integratedLookHeld) { setItemButtonPulse(); setItemButtonHeld(true); }
+            setAxis(ControllerButtons.AXIS_RX, (short) 0);
+            setAxis(ControllerButtons.AXIS_RY, (short) 0);
+            setCameraTouchActive(true);
+            setCameraState(0, x * 170); setCameraState(1, y * 170);
+        } else {
+            setCameraTouchActive(false); setCameraState(0, 0); setCameraState(1, 0);
+            setAxis(ControllerButtons.AXIS_RX, (short)(x * Short.MAX_VALUE));
+            setAxis(ControllerButtons.AXIS_RY, (short)(y * Short.MAX_VALUE));
+        }
+        integratedLookHeld = true;
+    }
 
     // Function to set up the controller overlay (inflate layout and initialize buttons)
     private void setupControllerOverlay() {
@@ -1003,6 +1059,9 @@ public class MainActivity extends SDLActivity{
         setupLookAround(rightScreenArea);
 
         setupToggleButton(buttonToggle,buttonGroup);
+        integratedTouchView = new IntegratedTouchView(this);
+        view.addView(integratedTouchView, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         applyTouchLeftStickMode();
         applyTouchControlsVisibility();
 
@@ -1039,7 +1098,7 @@ public class MainActivity extends SDLActivity{
 
     public void setTouchLeftStickFloatingFromNative(boolean floating) {
         preferences.edit().putBoolean(PREF_TOUCH_LEFT_STICK_FLOATING, floating).apply();
-        runOnUiThread(this::applyTouchLeftStickMode);
+        runOnUiThread(() -> { applyTouchLeftStickMode(); applyTouchControlsVisibility(); });
     }
 
     public void setTouchControlsMenuVisibleFromNative(boolean visible) {
@@ -1135,6 +1194,24 @@ public class MainActivity extends SDLActivity{
         }
 
         boolean touchControlsDisabled = preferences.getBoolean(PREF_TOUCH_CONTROLS_DISABLED, false);
+        boolean transparentSticks = preferences.getBoolean("touchTransparentSticks", false);
+        if (leftJoystick != null && leftJoystick.getBackground() != null) {
+            leftJoystick.getBackground().mutate().setAlpha(
+                    transparentSticks || preferences.getBoolean(PREF_TOUCH_LEFT_STICK_FLOATING, true) ? 0 : 255);
+        }
+        int integratedMode = preferences.getInt("integratedTouchMode", 0);
+        if (integratedTouchView != null) {
+            integratedTouchView.configure(integratedMode, !touchControlsDisabled,
+                    preferences.getBoolean(PREF_TOUCH_LEFT_STICK_FLOATING, true),
+                    preferences.getBoolean("touchRightStickFloating", true),
+                    preferences.getFloat("integratedTouchScale", 1),
+                    preferences.getFloat("integratedTouchOpacity", .55f), transparentSticks);
+            if (integratedMode != 0) {
+                overlayView.setVisibility(View.GONE);
+                DisableTouchArea();
+                return;
+            }
+        }
         overlayView.setVisibility(touchControlsDisabled ? View.GONE : View.VISIBLE);
 
         if (buttonGroup != null) {
@@ -1328,8 +1405,9 @@ public class MainActivity extends SDLActivity{
                         if (rightStickPointerId == MotionEvent.INVALID_POINTER_ID) {
                             int pointerIndex = event.getActionIndex();
                             rightStickPointerId = event.getPointerId(pointerIndex);
-                            rightStickStartX = event.getX(pointerIndex);
-                            rightStickStartY = event.getY(pointerIndex);
+                            boolean floating = preferences.getBoolean("touchRightStickFloating", true);
+                            rightStickStartX = floating ? event.getX(pointerIndex) : v.getWidth() / 2.0f;
+                            rightStickStartY = floating ? event.getY(pointerIndex) : v.getHeight() * .7f;
                         }
                         if (mIsAiming) {
                             setCameraTouchActive(true);

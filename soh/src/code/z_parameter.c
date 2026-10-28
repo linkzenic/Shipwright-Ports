@@ -22,6 +22,7 @@
 #include "soh/Enhancements/gameplaystats.h"
 #include "soh/ObjectExtension/ActorMaximumHealth.h"
 #include "soh/Enhancements/speedrun/Speedrun.h"
+#include "soh/Enhancements/controls/TouchHud.h"
 
 #include "message_data_static.h"
 #include <libultraship/bridge/consolevariablebridge.h>
@@ -4147,7 +4148,8 @@ void Interface_DrawItemButtons(PlayState* play) {
     // Also loads the Item Button Texture reused by other buttons afterwards
     gDPPipeSync(OVERLAY_DISP++);
     gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM);
-    gDPSetPrimColor(OVERLAY_DISP++, 0, 0, bButtonColor.r, bButtonColor.g, bButtonColor.b, interfaceCtx->bAlpha);
+    gDPSetPrimColor(OVERLAY_DISP++, 0, 0, bButtonColor.r, bButtonColor.g, bButtonColor.b,
+                    TouchHud_IsActive() && !interfaceCtx->unk_1FA ? 0 : interfaceCtx->bAlpha);
     gDPSetEnvColor(OVERLAY_DISP++, 0, 0, 0, 255);
 
     OVERLAY_DISP = Gfx_TextureIA8(OVERLAY_DISP, gButtonBackgroundTex, BBtn_Size, BBtn_Size, PosX_BtnB, PosY_BtnB,
@@ -4156,7 +4158,7 @@ void Interface_DrawItemButtons(PlayState* play) {
     // C-Left Button Color & Texture
     gDPPipeSync(OVERLAY_DISP++);
     gDPSetPrimColor(OVERLAY_DISP++, 0, 0, cLeftButtonColor.r, cLeftButtonColor.g, cLeftButtonColor.b,
-                    interfaceCtx->cLeftAlpha);
+                    TouchHud_IsActive() ? 0 : interfaceCtx->cLeftAlpha);
     gSPWideTextureRectangle(OVERLAY_DISP++, C_Left_BTN_Pos[0] << 2, C_Left_BTN_Pos[1] << 2,
                             (C_Left_BTN_Pos[0] + R_ITEM_BTN_WIDTH(1)) << 2,
                             (C_Left_BTN_Pos[1] + R_ITEM_BTN_WIDTH(1)) << 2, G_TX_RENDERTILE, 0, 0,
@@ -4164,7 +4166,7 @@ void Interface_DrawItemButtons(PlayState* play) {
 
     // C-Down Button Color & Texture
     gDPSetPrimColor(OVERLAY_DISP++, 0, 0, cDownButtonColor.r, cDownButtonColor.g, cDownButtonColor.b,
-                    interfaceCtx->cDownAlpha);
+                    TouchHud_IsActive() ? 0 : interfaceCtx->cDownAlpha);
     gSPWideTextureRectangle(OVERLAY_DISP++, C_Down_BTN_Pos[0] << 2, C_Down_BTN_Pos[1] << 2,
                             (C_Down_BTN_Pos[0] + R_ITEM_BTN_WIDTH(2)) << 2,
                             (C_Down_BTN_Pos[1] + R_ITEM_BTN_WIDTH(2)) << 2, G_TX_RENDERTILE, 0, 0,
@@ -4172,7 +4174,7 @@ void Interface_DrawItemButtons(PlayState* play) {
 
     // C-Right Button Color & Texture
     gDPSetPrimColor(OVERLAY_DISP++, 0, 0, cRightButtonColor.r, cRightButtonColor.g, cRightButtonColor.b,
-                    interfaceCtx->cRightAlpha);
+                    TouchHud_IsActive() ? 0 : interfaceCtx->cRightAlpha);
     gSPWideTextureRectangle(OVERLAY_DISP++, C_Right_BTN_Pos[0] << 2, C_Right_BTN_Pos[1] << 2,
                             (C_Right_BTN_Pos[0] + R_ITEM_BTN_WIDTH(3)) << 2,
                             (C_Right_BTN_Pos[1] + R_ITEM_BTN_WIDTH(3)) << 2, G_TX_RENDERTILE, 0, 0,
@@ -4216,7 +4218,7 @@ void Interface_DrawItemButtons(PlayState* play) {
         }
     }
 
-    if (interfaceCtx->naviCalling && (play->pauseCtx.state == 0) && (play->pauseCtx.debugState == 0) &&
+    if (!TouchHud_ItemHidden(8) && interfaceCtx->naviCalling && (play->pauseCtx.state == 0) && (play->pauseCtx.debugState == 0) &&
         (play->csCtx.state == CS_STATE_IDLE)) {
         if (!sCUpInvisible) {
             // C-Up Button Texture, Color & Label (Navi Text)
@@ -4232,13 +4234,30 @@ void Interface_DrawItemButtons(PlayState* play) {
                 temp = interfaceCtx->healthAlpha;
             }
 
-            gDPSetPrimColor(OVERLAY_DISP++, 0, 0, cUpButtonColor.r, cUpButtonColor.g, cUpButtonColor.b, temp);
+            s16 naviX = C_Up_BTN_Pos[0] - LabelX_Navi;
+            s16 naviY = C_Up_BTN_Pos[1] + LabelY_Navi;
+            s16 naviWidth = 32;
+            s16 naviHeight = 8;
+            s16 naviStep = 1 << 10;
+            s16 touchNaviSize;
+            int touchNavi = TouchHud_ItemRect(8, &naviX, &naviY, &touchNaviSize);
+            if (touchNavi) {
+                if (temp > 0) TouchHud_MarkContent(8);
+                naviWidth = touchNaviSize;
+                naviHeight = MAX(2, touchNaviSize / 4);
+                naviY += (touchNaviSize - naviHeight) / 2;
+                naviStep = (32 << 10) / naviWidth;
+                temp = (s16)(temp * CLAMP(CVarGetFloat(CVAR_SETTING("TouchControls.Opacity"), .55f), .15f, 1.f));
+            }
+
+            gDPSetPrimColor(OVERLAY_DISP++, 0, 0, cUpButtonColor.r, cUpButtonColor.g, cUpButtonColor.b,
+                           touchNavi ? 0 : temp);
             gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM);
             gSPWideTextureRectangle(OVERLAY_DISP++, C_Up_BTN_Pos[0] << 2, C_Up_BTN_Pos[1] << 2,
                                     (C_Up_BTN_Pos[0] + 16) << 2, (C_Up_BTN_Pos[1] + 16) << 2, G_TX_RENDERTILE, 0, 0,
                                     2 << 10, 2 << 10);
             gDPPipeSync(OVERLAY_DISP++);
-            gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, temp);
+            gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, TouchHud_NaviUtilityIcon() ? 0 : temp);
             gDPSetEnvColor(OVERLAY_DISP++, 0, 0, 0, 0);
             gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0,
                               PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
@@ -4247,9 +4266,9 @@ void Interface_DrawItemButtons(PlayState* play) {
                                    G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK,
                                    G_TX_NOLOD, G_TX_NOLOD);
 
-            gSPWideTextureRectangle(OVERLAY_DISP++, C_Up_BTN_Pos[0] - LabelX_Navi << 2,
-                                    C_Up_BTN_Pos[1] + LabelY_Navi << 2, (C_Up_BTN_Pos[0] - LabelX_Navi + 32) << 2,
-                                    (C_Up_BTN_Pos[1] + LabelY_Navi + 8) << 2, G_TX_RENDERTILE, 0, 0, 1 << 10, 1 << 10);
+            gSPWideTextureRectangle(OVERLAY_DISP++, naviX << 2, naviY << 2,
+                                    (naviX + naviWidth) << 2, (naviY + naviHeight) << 2,
+                                    G_TX_RENDERTILE, 0, 0, naviStep, naviStep);
         }
 
         sCUpTimer--;
@@ -4263,7 +4282,7 @@ void Interface_DrawItemButtons(PlayState* play) {
 
     // Empty C Button Arrows
     for (temp = 1; temp < 4; temp++) {
-        if (gSaveContext.equips.buttonItems[temp] > 0xF0) {
+        if (!TouchHud_IsActive() && gSaveContext.equips.buttonItems[temp] > 0xF0) {
             s16 X_Margins_CL;
             s16 X_Margins_CR;
             s16 X_Margins_CD;
@@ -4414,6 +4433,7 @@ int16_t gItemIconWidth[] = { 30, 24, 24, 24, 16, 16, 16, 16 };
 int16_t gItemIconDD[] = { 550, 680, 680, 680, 1024, 1024, 1024, 1024 };
 
 void Interface_DrawItemIconTexture(PlayState* play, void* texture, s16 button) {
+    if (TouchHud_ItemHidden(button)) return;
     OPEN_DISPS(play->state.gfxCtx);
     GraphicsContext* gfxCtx = play->state.gfxCtx;
     InterfaceContext* interfaceCtx = &play->interfaceCtx;
@@ -4643,6 +4663,19 @@ void Interface_DrawItemIconTexture(PlayState* play, void* texture, s16 button) {
         ItemIconPos[3][1] = ItemIconPos_ori[3][1];
     }
 
+    s16 touchIconSize = gItemIconWidth[button];
+    s16 iconStep = gItemIconDD[button] << 1;
+    if (TouchHud_ItemRect(button, &ItemIconPos[button][0], &ItemIconPos[button][1], &touchIconSize)) {
+        iconStep = (32 << 10) / touchIconSize;
+        // Keep native disable/fade alpha, while applying the user's touch opacity.
+        u16 touchAlpha[8] = { interfaceCtx->bAlpha, interfaceCtx->cLeftAlpha, interfaceCtx->cDownAlpha,
+                             interfaceCtx->cRightAlpha, interfaceCtx->dpadUpAlpha, interfaceCtx->dpadDownAlpha,
+                             interfaceCtx->dpadLeftAlpha, interfaceCtx->dpadRightAlpha };
+        if (touchAlpha[button] > 0) TouchHud_MarkContent(button);
+        gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255,
+                       (u16)(touchAlpha[button] * CLAMP(CVarGetFloat(CVAR_SETTING("TouchControls.Opacity"), .55f), .15f, 1.f)));
+    }
+
     if (isBombArrow) {
         texture = (void*)gItemIcons[ITEM_BOW];
     }
@@ -4651,14 +4684,14 @@ void Interface_DrawItemIconTexture(PlayState* play, void* texture, s16 button) {
                         G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
 
     gSPWideTextureRectangle(OVERLAY_DISP++, ItemIconPos[button][0] << 2, ItemIconPos[button][1] << 2,
-                            (ItemIconPos[button][0] + gItemIconWidth[button]) << 2,
-                            (ItemIconPos[button][1] + gItemIconWidth[button]) << 2, G_TX_RENDERTILE, 0, 0,
-                            gItemIconDD[button] << 1, gItemIconDD[button] << 1);
+                            (ItemIconPos[button][0] + touchIconSize) << 2,
+                            (ItemIconPos[button][1] + touchIconSize) << 2, G_TX_RENDERTILE, 0, 0,
+                            iconStep, iconStep);
 
     if (isBombArrow) {
         s16 overlaySize = (button >= 4) ? 8 : 12;
-        s16 overlayLeft = ItemIconPos[button][0] + ((gItemIconWidth[button] - overlaySize) / 2) + 2;
-        s16 overlayTop = ItemIconPos[button][1] + ((gItemIconWidth[button] - overlaySize) / 2) - 2;
+        s16 overlayLeft = ItemIconPos[button][0] + ((touchIconSize - overlaySize) / 2) + 2;
+        s16 overlayTop = ItemIconPos[button][1] + ((touchIconSize - overlaySize) / 2) - 2;
         s16 overlayStep = ((32 << 10) / overlaySize);
 
         gDPPipeSync(OVERLAY_DISP++);
@@ -4683,6 +4716,7 @@ static int16_t gItemAmmoY[] = { B_BUTTON_Y + 18, C_LEFT_BUTTON_Y + 17, C_DOWN_BU
                                 DPAD_UP_Y + 11,  DPAD_DOWN_Y + 11,     DPAD_LEFT_Y + 11,     DPAD_RIGHT_Y + 11 };
 
 void Interface_DrawAmmoCount(PlayState* play, s16 button, s16 alpha) {
+    if (TouchHud_ItemHidden(button)) return;
     s16 i;
     s16 ammo;
     s16 X_Margins_CL;
@@ -4909,6 +4943,13 @@ void Interface_DrawAmmoCount(PlayState* play, s16 button, s16 alpha) {
     } else {
         ItemIconPos[3][0] = OTRGetRectDimensionFromRightEdge(ItemIconPos_ori[3][0]);
         ItemIconPos[3][1] = ItemIconPos_ori[3][1];
+    }
+
+    s16 touchAmmoSize;
+    if (TouchHud_ItemRect(button, &ItemIconPos[button][0], &ItemIconPos[button][1], &touchAmmoSize)) {
+        ItemIconPos[button][0] += touchAmmoSize - 12;
+        ItemIconPos[button][1] += touchAmmoSize - 5;
+        alpha = (s16)(alpha * CLAMP(CVarGetFloat(CVAR_SETTING("TouchControls.Opacity"), .55f), .15f, 1.f));
     }
 
     OPEN_DISPS(play->state.gfxCtx);
@@ -5658,7 +5699,7 @@ void Interface_Draw(PlayState* play) {
             gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM);
 
             gDPSetPrimColor(OVERLAY_DISP++, 0, 0, dPadColor.r, dPadColor.g, dPadColor.b, dpadAlpha);
-            if (fullUi) {
+            if (fullUi && !TouchHud_IsActive()) {
                 gDPLoadTextureBlock(OVERLAY_DISP++, gDPadTex, G_IM_FMT_IA, G_IM_SIZ_16b, 32, 32, 0,
                                     G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK,
                                     G_TX_NOLOD, G_TX_NOLOD);
@@ -5765,7 +5806,7 @@ void Interface_Draw(PlayState* play) {
         gSPClearGeometryMode(OVERLAY_DISP++, G_CULL_BOTH);
         gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM);
         gDPSetPrimColor(OVERLAY_DISP++, 0, 0, aButtonColor.r, aButtonColor.g, aButtonColor.b, interfaceCtx->aAlpha);
-        if (fullUi) {
+        if (fullUi && !TouchHud_IsActive()) {
             Interface_DrawActionButton(play, PosX_BtnA, PosY_BtnA);
         }
         gDPPipeSync(OVERLAY_DISP++);
@@ -5780,7 +5821,32 @@ void Interface_Draw(PlayState* play) {
         gSPMatrix(OVERLAY_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_MODELVIEW | G_MTX_LOAD);
         gSPVertex(OVERLAY_DISP++, &interfaceCtx->actionVtx[4], 4, 0);
 
-        if ((interfaceCtx->unk_1EC < 2) || (interfaceCtx->unk_1EC == 3)) {
+        if (TouchHud_IsActive()) {
+            // Keep the game's localized, mod-resolved action texture, but replace
+            // the original HUD A button with its editable touch-control anchor.
+            s16 actionX, actionY, actionSize;
+            if (TouchHud_ItemRect(9, &actionX, &actionY, &actionSize)) {
+                u16 action = ((interfaceCtx->unk_1EC < 2) || (interfaceCtx->unk_1EC == 3))
+                                 ? interfaceCtx->unk_1EE : interfaceCtx->unk_1F0;
+                if (interfaceCtx->aAlpha > 0 && action != DO_ACTION_NONE && action < DO_ACTION_MAX) {
+                    TouchHud_MarkContent(9);
+                }
+                s16 actionHeight = MAX(2, actionSize / 3);
+                actionY += (actionSize - actionHeight) / 2;
+                void* actionTexture = ((interfaceCtx->unk_1EC < 2) || (interfaceCtx->unk_1EC == 3))
+                                          ? interfaceCtx->doActionSegment[0] : interfaceCtx->doActionSegment[1];
+                gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255,
+                               (u16)(interfaceCtx->aAlpha * CLAMP(CVarGetFloat(CVAR_SETTING("TouchControls.Opacity"), .55f), .15f, 1.f)));
+                gDPLoadTextureBlock_4b(OVERLAY_DISP++, actionTexture, G_IM_FMT_IA,
+                                       DO_ACTION_TEX_WIDTH(), DO_ACTION_TEX_HEIGHT(), 0,
+                                       G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMIRROR | G_TX_CLAMP,
+                                       G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
+                gSPWideTextureRectangle(OVERLAY_DISP++, actionX * 4, actionY * 4,
+                                        (actionX + actionSize) * 4, (actionY + actionHeight) * 4,
+                                        G_TX_RENDERTILE, 0, 0, (DO_ACTION_TEX_WIDTH() << 10) / actionSize,
+                                        (DO_ACTION_TEX_HEIGHT() << 10) / actionHeight);
+            }
+        } else if ((interfaceCtx->unk_1EC < 2) || (interfaceCtx->unk_1EC == 3)) {
             Interface_DrawActionLabel(play->state.gfxCtx, interfaceCtx->doActionSegment[0]);
         } else {
             Interface_DrawActionLabel(play->state.gfxCtx, interfaceCtx->doActionSegment[1]);

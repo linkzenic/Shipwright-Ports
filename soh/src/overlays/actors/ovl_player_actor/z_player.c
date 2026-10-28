@@ -7,6 +7,7 @@
 #include <libultraship/libultra.h>
 #include "global.h"
 #include "soh/Enhancements/ManualJump/ManualJump.h"
+#include "soh/Enhancements/controls/TouchHud.h"
 
 #include "overlays/actors/ovl_Bg_Heavy_Block/z_bg_heavy_block.h"
 #include "overlays/actors/ovl_Door_Shutter/z_door_shutter.h"
@@ -6230,7 +6231,7 @@ s32 Player_ActionHandler_Talk(Player* this, PlayState* play) {
                             this->stateFlags2 |= PLAYER_STATE2_NAVI_ALERT;
                         }
 
-                        if (!CHECK_BTN_ALL(sControlInput->press.button,
+                        if (!TouchHud_NaviPressed() && !CHECK_BTN_ALL(sControlInput->press.button,
                                            CVarGetInteger(CVAR_ENHANCEMENT("NaviOnL"), 0) ? BTN_L : BTN_CUP) &&
                             !forceTalkToNavi) {
                             return 0;

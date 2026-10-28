@@ -163,6 +163,7 @@ tasks.register("prepareAndroidSupportAssets", Sync) {
     into layout.buildDirectory.dir("generated/sohSupportAssets")
     from("../../soh/assets/yml") { into "assets" }
     from("src/main/assets/gamecontrollerdb.txt")
+    from("src/main/assets/fonts") { into "fonts" }
     from(extractorVersionFile)
     from(provider { file(supportArchive.get()) }) { rename { "soh.o2r" } }
     doFirst {

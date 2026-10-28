@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "soh/Enhancements/controls/TouchHud.h"
 #include "soh/Enhancements/controls/Mouse.h"
 #include "soh/OTRGlobals.h"
 #include "soh/ResourceManagerHelpers.h"
@@ -227,6 +228,11 @@ void PadMgr_ProcessInputs(PadMgr* padMgr) {
         switch (padnow1->err_no) {
             case 0:
                 input->cur = *padnow1;
+
+                if (i == 0) {
+                    input->cur.button |= TouchHud_Buttons();
+                    TouchHud_Stick(&input->cur.stick_x, &input->cur.stick_y);
+                }
 
                 if (GameInteractor_DisableZTargetingActive()) {
                     input->cur.button &= ~(BTN_Z);

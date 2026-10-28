@@ -13,6 +13,7 @@
 #ifdef __ANDROID__
 #include <jni.h>
 #include <SDL2/SDL.h>
+#include "soh/Enhancements/controls/TouchHudBindings.h"
 #endif
 
 extern "C" {
@@ -72,6 +73,73 @@ static const std::map<int32_t, const char*> touchFaceButtonLayoutMap = {
     { 1, "BAYX (Xbox)" },
     { 2, "GC Layout" },
 };
+
+static const std::map<int32_t, const char*> touchStyleMap = {
+    { 0, "Classic" }, { 1, "N64" }, { 2, "GameCube" }, { 3, "Modern" },
+};
+
+static const std::map<int32_t, const char*> touchActionMap = {
+    {TouchHud::Disabled, "Disabled"}, {TouchHud::ActionA, "Action / A"},
+    {TouchHud::SwordB, "Sword / B"}, {TouchHud::Target, "Target / N64 Z"},
+    {TouchHud::Shield, "Shield / R"}, {TouchHud::Navi, "Navi"},
+    {TouchHud::ItemLeft, "Left item / C-left"}, {TouchHud::ItemDown, "Down item / C-down"},
+    {TouchHud::ItemRight, "Right item / C-right"}, {TouchHud::ExtraL, "Extra / N64 L"},
+    {TouchHud::FirstPerson, "First-person / C-up"}, {TouchHud::Pause, "Pause / Start"},
+    {TouchHud::DpadUp, "Extra Item 1 / D-pad Up"}, {TouchHud::DpadDown, "Extra Item 2 / D-pad Down"},
+    {TouchHud::DpadLeft, "Extra Item 3 / D-pad Left"}, {TouchHud::DpadRight, "Extra Item 4 / D-pad Right"},
+    {TouchHud::ToggleMap, "Toggle minimap"},
+    {TouchHud::Modifier1, "Modifier 1 / M1"},
+    {TouchHud::Modifier2, "Modifier 2 / M2 (reset by default)"},
+};
+static const std::map<int32_t, const char*> touchNaviLocationMap = {
+    {0, "Fairy button (default)"}, {1, "D-pad Up"}, {2, "Z"}, {3, "Custom assignment"}
+};
+static std::array<std::array<int, TouchHud::BindingCount>, 4> touchBindingSnapshot;
+
+static void SetAndroidIntegratedTouch() {
+    if (CVarGetInteger(CVAR_ENHANCEMENT("ManualJump"), 0) && !CVarGetInteger(CVAR_SETTING("DisableChanges"), 0)) {
+        for (int style=1; style<=3; ++style) {
+            int jumpIndex = TouchHud::JumpIndex(style, CVarGetInteger(TouchHud::JumpCvar(style), 0));
+            if (jumpIndex >= 0 && CVarGetInteger(TouchHud::BindingCvar(style, jumpIndex), TouchHud::DefaultAction(style,jumpIndex)) == TouchHud::Navi) {
+                int fairyIndex = style == 2 ? 14 : 5;
+                int displaced = CVarGetInteger(TouchHud::BindingCvar(style,fairyIndex), TouchHud::DefaultAction(style,fairyIndex));
+                CVarSetInteger(TouchHud::BindingCvar(style,jumpIndex), displaced);
+                CVarSetInteger(TouchHud::BindingCvar(style,fairyIndex), TouchHud::Navi);
+            }
+        }
+    }
+    for (int style=1; style<=3; ++style) for (int i=0; i<TouchHud::BindingCount; ++i)
+        touchBindingSnapshot[style][i] = CVarGetInteger(TouchHud::BindingCvar(style, i), TouchHud::DefaultAction(style, i));
+    int naviLocation = 3;
+    if (touchBindingSnapshot[2][14] == TouchHud::Navi) naviLocation = 0;
+    else if (touchBindingSnapshot[2][9] == TouchHud::Navi) naviLocation = 1;
+    else if (touchBindingSnapshot[2][3] == TouchHud::Navi) naviLocation = 2;
+    CVarSetInteger(CVAR_SETTING("TouchControls.GameCubeNaviLocation"), naviLocation);
+    auto* env = static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());
+    jobject activity = static_cast<jobject>(SDL_AndroidGetActivity());
+    if (!env || !activity) return;
+    jclass type = env->GetObjectClass(activity);
+    jmethodID method = env->GetMethodID(type, "setIntegratedTouchFromNative", "(IFFZZ)V");
+    if (method) env->CallVoidMethod(activity, method,
+        std::clamp(CVarGetInteger(CVAR_SETTING("TouchControls.Style"), 0), 0, 3),
+        CVarGetFloat(CVAR_SETTING("TouchControls.Scale"), 1),
+        CVarGetFloat(CVAR_SETTING("TouchControls.Opacity"), .55f),
+        static_cast<jboolean>(CVarGetInteger(CVAR_SETTING("TouchControls.TransparentSticks"), 0) != 0),
+        static_cast<jboolean>(CVarGetInteger(CVAR_SETTING("TouchControls.FloatingRightStick"), 1) != 0));
+    if (env->ExceptionCheck()) env->ExceptionClear();
+    env->DeleteLocalRef(type); env->DeleteLocalRef(activity);
+}
+
+static void EditAndroidIntegratedTouch() {
+    auto* env = static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());
+    jobject activity = static_cast<jobject>(SDL_AndroidGetActivity());
+    if (!env || !activity) return;
+    jclass type = env->GetObjectClass(activity);
+    jmethodID method = env->GetMethodID(type, "editIntegratedTouchFromNative", "()V");
+    if (method) env->CallVoidMethod(activity, method);
+    if (env->ExceptionCheck()) env->ExceptionClear();
+    env->DeleteLocalRef(type); env->DeleteLocalRef(activity);
+}
 
 static void SetAndroidTouchControlsDisabled(bool disabled) {
     JNIEnv* env = (JNIEnv*)SDL_AndroidGetJNIEnv();
@@ -612,8 +680,28 @@ void SohMenu::AddMenuSettings() {
     path.sidebarName = "Touch Controls";
     path.column = SECTION_COLUMN_1;
     AddSidebarEntry("Settings", path.sidebarName, 2);
+    AddWidget(path, "Touch Controller Style", WIDGET_CVAR_COMBOBOX)
+        .CVar(CVAR_SETTING("TouchControls.Style"))
+        .RaceDisable(false)
+        .Callback([](WidgetInfo&) { SetAndroidIntegratedTouch(); })
+        .Options(ComboboxOptions().DefaultIndex(0).ComboMap(touchStyleMap).Tooltip(
+            "Classic preserves the existing controls and HUD. Integrated presets place live item icons on the touch buttons."));
+    AddWidget(path, "Edit Integrated Touch Layout", WIDGET_BUTTON)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"), 0) == 0; })
+        .RaceDisable(false).Callback([](WidgetInfo&) { EditAndroidIntegratedTouch(); });
+    AddWidget(path, "Size", WIDGET_CVAR_SLIDER_FLOAT)
+        .CVar(CVAR_SETTING("TouchControls.Scale"))
+        .PreFunc([](WidgetInfo& info) { info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"), 0) == 0; })
+        .RaceDisable(false).Callback([](WidgetInfo&) { SetAndroidIntegratedTouch(); })
+        .Options(FloatSliderOptions().Min(.75f).Max(1.5f).DefaultValue(1).IsPercentage());
+    AddWidget(path, "Opacity", WIDGET_CVAR_SLIDER_FLOAT)
+        .CVar(CVAR_SETTING("TouchControls.Opacity"))
+        .PreFunc([](WidgetInfo& info) { info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"), 0) == 0; })
+        .RaceDisable(false).Callback([](WidgetInfo&) { SetAndroidIntegratedTouch(); })
+        .Options(FloatSliderOptions().Min(.15f).Max(1).DefaultValue(.55f).IsPercentage());
     AddWidget(path, "Touch Face Buttons", WIDGET_CVAR_COMBOBOX)
         .CVar(CVAR_SETTING("TouchControls.FaceButtonLayout"))
+        .PreFunc([](WidgetInfo& info) { info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"), 0) != 0; })
         .RaceDisable(false)
         .Callback([](WidgetInfo& info) {
             SetAndroidTouchFaceButtonLayout(
@@ -632,6 +720,20 @@ void SohMenu::AddMenuSettings() {
         })
         .Options(CheckboxOptions().DefaultValue(true).Tooltip(
             "When disabled, the left touch stick stays fixed in the lower-left corner."));
+    AddWidget(path, "Transparent Sticks", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_SETTING("TouchControls.TransparentSticks"))
+        .RaceDisable(false)
+        .Callback([](WidgetInfo&) { SetAndroidIntegratedTouch(); })
+        .Options(CheckboxOptions().Tooltip(
+            "Hides fixed stick backgrounds and outlines while keeping the small position indicators visible. "
+            "Floating sticks are always transparent. The layout editor still shows their bounds."));
+    AddWidget(path, "Floating Right Stick", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_SETTING("TouchControls.FloatingRightStick"))
+        .RaceDisable(false)
+        .Callback([](WidgetInfo&) { SetAndroidIntegratedTouch(); })
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip(
+            "Sets the right camera stick's origin where you touch inside its area. "
+            "When disabled, its origin is fixed. Independent of Floating Left Stick."));
     AddWidget(path, "Disable Touch Controls", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_SETTING("TouchControls.Disabled"))
         .RaceDisable(false)
@@ -639,9 +741,130 @@ void SohMenu::AddMenuSettings() {
             SetAndroidTouchControlsDisabled(CVarGetInteger(CVAR_SETTING("TouchControls.Disabled"), 0) != 0);
         })
         .Options(CheckboxOptions().Tooltip("Hides the Android touch controls and eye button."));
+    AddWidget(path, "Extra Item Slots", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("DpadEquips"))
+        .Options(CheckboxOptions().Tooltip(
+            "Enables up to four extra items on the D-pad, for every layout and physical controllers. "
+            "In the pause inventory, highlight an item and press a D-pad direction to equip it. "
+            "If D-pad pause navigation is enabled, hold C-up (the touch Fairy control) while pressing the direction. "
+            "Integrated layouts can assign Extra Item 1-4 to other touch buttons in the right column. Unused slots may remain empty."));
+    AddWidget(path, "Allow Unequipping Items", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("ItemUnequip"))
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"),0); })
+        .Options(CheckboxOptions().Tooltip(
+            "Highlight an equipped item and press its assigned C-button or D-pad direction again to clear that slot. "
+            "This is the existing shared item-unequip enhancement."));
+
+    path.column = SECTION_COLUMN_2;
+    AddWidget(path, "Touch Button Assignments", WIDGET_SEPARATOR_TEXT)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"), 0) == 0; });
+    AddWidget(path, "Enable Manual Jump (Experimental)", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("ManualJump"))
+        .PreFunc([](WidgetInfo& info) { info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"), 0) == 0; })
+        .Callback([](WidgetInfo&) { SetAndroidIntegratedTouch(); })
+        .Options(CheckboxOptions().Tooltip(
+            "The existing Manual Jump enhancement. Enables grounded jumps and disables automatic ledge jumps. "
+            "Touch button choices below are separate from physical controller bindings."));
+    static const std::map<int32_t,const char*> touchJumpButtons[3] = {
+        {{0,"Off"},{1,"C-left"},{2,"C-down"},{3,"C-right"}},
+        {{0,"Off"},{1,"X"},{2,"Y"},{3,"Z"}},
+        {{0,"Off"},{1,"X"},{2,"Y"},{3,"ZR"}}
+    };
+    for (int style=1; style<=3; ++style) {
+        AddWidget(path,"Jump Button##TouchJump"+std::to_string(style),WIDGET_CVAR_COMBOBOX)
+            .CVar(TouchHud::JumpCvar(style))
+            .PreFunc([style](WidgetInfo& info) { info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"),0) != style; })
+            .RaceDisable(false)
+            .Callback([](WidgetInfo&) {
+                SetAndroidIntegratedTouch();
+                Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+            })
+            .Options(ComboboxOptions().DefaultIndex(0).ComboMap(touchJumpButtons[style-1]).Tooltip(
+                "Manual Jump takes priority over this touch button's item assignment while enabled. "
+                "Off restores its saved assignment. If this button was Navi, Navi returns to the Fairy/C-up control. "
+                "Physical controller bindings are unchanged."));
+    }
+    static const std::map<int32_t,const char*> touchVaultModes = {{0,"Automatic"},{1,"Manual"}};
+    AddWidget(path,"Vaulting Mode",WIDGET_CVAR_COMBOBOX)
+        .CVar(CVAR_ENHANCEMENT("ManualJumpVaultMode"))
+        .PreFunc([](WidgetInfo& info) { info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"),0) == 0; })
+        .Options(ComboboxOptions().DefaultIndex(1).ComboMap(touchVaultModes).Tooltip(
+            "The shared Manual Jump gameplay option: Automatic keeps native vaults and short step-ups. "
+            "Manual requires Jump while moving into these obstacles, with a 180 ms buffer. "
+            "Tall climbs and A-button climbing remain unchanged. Manual Jump must be enabled."));
+    AddWidget(path, "Navi Button", WIDGET_CVAR_COMBOBOX)
+        .CVar(CVAR_SETTING("TouchControls.GameCubeNaviLocation"))
+        .PreFunc([](WidgetInfo& info) { info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"), 0) != 2; })
+        .RaceDisable(false)
+        .Callback([](WidgetInfo&) {
+            int location = CVarGetInteger(CVAR_SETTING("TouchControls.GameCubeNaviLocation"), 0);
+            if (location >= 0 && location <= 2) {
+                const int destinations[] = {14, 9, 3};
+                int destination = destinations[location];
+                int displaced = touchBindingSnapshot[2][destination];
+                bool moved = displaced == TouchHud::Navi;
+                for (int i=0; i<TouchHud::BindingCount; ++i) if (i != destination && touchBindingSnapshot[2][i] == TouchHud::Navi) {
+                    CVarSetInteger(TouchHud::BindingCvar(2, i), moved ? TouchHud::Disabled : displaced);
+                    moved = true;
+                }
+                CVarSetInteger(TouchHud::BindingCvar(2, destination), TouchHud::Navi);
+            }
+            SetAndroidIntegratedTouch();
+            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+        })
+        .Options(ComboboxOptions().DefaultIndex(0).ComboMap(touchNaviLocationMap).Tooltip(
+            "Defaults to the small Fairy button. D-pad Up and Z swap their current function with Navi, "
+            "so no item input is lost. Physical controllers are unchanged."));
+    static const char* labels[3][TouchHud::BindingCount] = {
+        {"A", "B", "C-left", "C-down", "C-right", "C-up", "Z", "L", "R", "D-pad up", "D-pad down", "D-pad left", "D-pad right", "Start", "Fairy / utility", "Map"},
+        {"A", "B", "Y", "Z", "X", "C-up", "L", "Extra", "R", "D-pad up", "D-pad down", "D-pad left", "D-pad right", "Start", "Fairy / utility", "Map"},
+        {"A", "B", "X", "Y", "ZR", "Fairy", "ZL", "L", "R", "D-pad up", "D-pad down", "D-pad left", "D-pad right", "Start", "Fairy / utility", "Map"}
+    };
+    for (int style=1; style<=3; ++style) for (int i=0; i<TouchHud::BindingCount; ++i) {
+        AddWidget(path, std::string(labels[style-1][i]) + "##TouchBinding" + std::to_string(style) + "_" + TouchHud::Keys[i], WIDGET_CVAR_COMBOBOX)
+            .CVar(TouchHud::BindingCvar(style, i))
+            .PreFunc([style, i](WidgetInfo& info) {
+                info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"), 0) != style ||
+                    (i == 14 && style != 2) ||
+                    (i == 15 && style == 1 && !CVarGetInteger(CVAR_CHEAT("MoonJumpOnL"),0));
+                bool jumpOverride = CVarGetInteger(CVAR_ENHANCEMENT("ManualJump"),0) &&
+                    !CVarGetInteger(CVAR_SETTING("DisableChanges"),0) &&
+                    TouchHud::JumpIndex(style,CVarGetInteger(TouchHud::JumpCvar(style),0)) == i;
+                info.options->disabled = jumpOverride;
+                if (jumpOverride) info.options->disabledTooltip = "Manual Jump currently overrides this touch button. Choose Off in Jump Button to restore this assignment.";
+            })
+            .RaceDisable(false)
+            .Callback([style, i](WidgetInfo&) {
+                int chosen = CVarGetInteger(TouchHud::BindingCvar(style, i), TouchHud::DefaultAction(style, i));
+                // Swap functions instead of silently duplicating an item/prompt anchor.
+                if (chosen != TouchHud::Disabled) for (int j=0; j<TouchHud::BindingCount; ++j) {
+                    if (j != i && touchBindingSnapshot[style][j] == chosen)
+                        CVarSetInteger(TouchHud::BindingCvar(style, j), touchBindingSnapshot[style][i]);
+                }
+                SetAndroidIntegratedTouch();
+                Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+            })
+            .Options(ComboboxOptions().DefaultIndex(TouchHud::DefaultAction(style, i)).ComboMap(touchActionMap).Tooltip(
+                "Touch-only assignment for this preset. Selecting an assigned action swaps the two touch buttons. "
+                "Item icons and prompts follow these assignments. Physical controller bindings are unchanged. "
+                "M1/M2 use the existing shared modifier effects. Warning: M2 resets the game by default; "
+                "check Settings > General > Reset Button Combination before assigning it."));
+    }
+    AddWidget(path, "Restore Default Assignments", WIDGET_BUTTON)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"), 0) == 0; })
+        .RaceDisable(false)
+        .Callback([](WidgetInfo&) {
+            int style = std::clamp(CVarGetInteger(CVAR_SETTING("TouchControls.Style"), 0), 1, 3);
+            for (int i=0; i<TouchHud::BindingCount; ++i)
+                CVarSetInteger(TouchHud::BindingCvar(style, i), TouchHud::DefaultAction(style, i));
+            CVarSetInteger(TouchHud::JumpCvar(style), 0);
+            SetAndroidIntegratedTouch();
+            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+        }).Options(ButtonOptions().Tooltip("Restores only this preset's touch assignments. Positions, sizes and physical controllers are unchanged."));
 
     // Keep Android's persisted overlay state aligned with the native CVars after relaunches.
     SetAndroidTouchFaceButtonLayout(CVarGetInteger(CVAR_SETTING("TouchControls.FaceButtonLayout"), 0));
+    SetAndroidIntegratedTouch();
     SetAndroidTouchLeftStickFloating(
         CVarGetInteger(CVAR_SETTING("TouchControls.FloatingLeftStick"), 1) != 0);
     SetAndroidTouchControlsDisabled(CVarGetInteger(CVAR_SETTING("TouchControls.Disabled"), 0) != 0);
@@ -649,6 +872,7 @@ void SohMenu::AddMenuSettings() {
 
     // Input Viewer
     path.sidebarName = "Input Viewer";
+    path.column = SECTION_COLUMN_1;
     AddSidebarEntry("Settings", path.sidebarName, 3);
     AddWidget(path, "Input Viewer", WIDGET_SEPARATOR_TEXT);
     AddWidget(path, "Toggle Input Viewer", WIDGET_WINDOW_BUTTON)

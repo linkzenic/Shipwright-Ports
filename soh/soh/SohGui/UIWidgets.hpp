@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UIWidgetOptions.hpp"
+#include "UIComboLabel.h"
 
 #include <libultraship/bridge/consolevariablebridge.h>
 #include <ship/window/gui/GuiWindow.h>
@@ -159,7 +160,7 @@ bool Combobox(std::string label, T* value, const std::map<T, const char*>& combo
     if (ImGui::BeginCombo(invisibleLabel, comboMap.at(*value), options.flags)) {
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10.0f, 10.0f));
         for (const auto& pair : comboMap) {
-            if (strlen(pair.second) > 1) {
+            if (ComboLabelVisible(pair.second)) {
                 if (ImGui::Selectable(pair.second, pair.first == *value)) {
                     *value = pair.first;
                     dirty = true;
@@ -243,7 +244,7 @@ bool Combobox(std::string label, T* value, const std::vector<const char*>& combo
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10.0f, 10.0f));
         for (size_t i = 0; i < comboVector.size(); ++i) {
             auto newValue = static_cast<T>(i);
-            if (strlen(comboVector.at(i)) > 1) {
+            if (ComboLabelVisible(comboVector.at(i))) {
                 if (ImGui::Selectable(comboVector.at(i), newValue == *value)) {
                     *value = newValue;
                     dirty = true;
@@ -328,7 +329,7 @@ bool Combobox(std::string label, T* value, const std::vector<std::string>& combo
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10.0f, 10.0f));
         for (size_t i = 0; i < comboVector.size(); ++i) {
             auto newValue = static_cast<T>(i);
-            if (comboVector.at(i).length() > 1) {
+            if (ComboLabelVisible(comboVector.at(i).c_str())) {
                 if (ImGui::Selectable(comboVector.at(i).c_str(), newValue == *value)) {
                     *value = newValue;
                     dirty = true;
@@ -416,7 +417,7 @@ bool Combobox(std::string label, T* value, const char* (&comboArray)[N], const C
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10.0f, 10.0f));
         for (size_t i = 0; i < N; ++i) {
             auto newValue = static_cast<T>(i);
-            if (strlen(comboArray[i]) > 1) {
+            if (ComboLabelVisible(comboArray[i])) {
                 if (ImGui::Selectable(comboArray[i], newValue == *value)) {
                     *value = newValue;
                     dirty = true;

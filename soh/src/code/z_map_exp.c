@@ -10,6 +10,7 @@
 #include "soh/Enhancements/cosmetics/cosmeticsTypes.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/Enhancements/savestate_serialize.h"
+#include "soh/Enhancements/controls/TouchHud.h"
 #include <libultraship/bridge/consolevariablebridge.h>
 
 MapData* gMapData;
@@ -779,6 +780,7 @@ void Minimap_DrawCompassIcons(PlayState* play) {
 
 void Minimap_Draw(PlayState* play) {
     s32 pad[2];
+    const int touchMapPressed = TouchHud_MapPressed();
     InterfaceContext* interfaceCtx = &play->interfaceCtx;
     s32 mapIndex = gSaveContext.mapIndex;
     Color_RGB8 minimapColor = { 0, 255, 255 };
@@ -875,8 +877,7 @@ void Minimap_Draw(PlayState* play) {
                     }
                 }
 
-                if (CHECK_BTN_ALL(play->state.input[0].press.button, BTN_L) && !Play_InCsMode(play) &&
-                    enableMapToggle) {
+                if ((touchMapPressed || (enableMapToggle && CHECK_BTN_ALL(play->state.input[0].press.button, BTN_L))) && !Play_InCsMode(play)) {
                     osSyncPrintf("Game_play_demo_mode_check=%d\n", Play_InCsMode(play));
                     // clang-format off
                     if (!R_MINIMAP_DISABLED) { Audio_PlaySfxGeneral(NA_SE_SY_CAMERA_ZOOM_UP, &gSfxDefaultPos, 4,
@@ -1068,8 +1069,7 @@ void Minimap_Draw(PlayState* play) {
                     Minimap_DrawCompassIcons(play); // Draw icons for the player spawn and current position
                 }
 
-                if (CHECK_BTN_ALL(play->state.input[0].press.button, BTN_L) && !Play_InCsMode(play) &&
-                    enableMapToggle) {
+                if ((touchMapPressed || (enableMapToggle && CHECK_BTN_ALL(play->state.input[0].press.button, BTN_L))) && !Play_InCsMode(play)) {
                     // clang-format off
                     if (!R_MINIMAP_DISABLED) { Audio_PlaySfxGeneral(NA_SE_SY_CAMERA_ZOOM_UP, &gSfxDefaultPos, 4,
                                                                       &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb); }
