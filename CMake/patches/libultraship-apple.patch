@@ -1,0 +1,914 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 08cc7915..f10d517b 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -11,7 +11,7 @@ option(NON_PORTABLE "Build a non-portable version" OFF)
+ option(DISABLE_DLL_LOADER "Disable dynamic library loading support" OFF)
+ option(ENABLE_SCRIPTING "Enable TCC-based C mod compilation and scripting system" OFF)
+ 
+-if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
++if(CMAKE_SYSTEM_NAME MATCHES "iOS|tvOS")
+     option(SIGN_LIBRARY "Enable xcode signing" OFF)
+     option(BUNDLE_ID "Bundle ID for xcode signing" "com.example.libultraship")
+     set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+@@ -19,7 +19,7 @@ endif()
+ 
+ project(libultraship LANGUAGES C CXX)
+ 
+-if (CMAKE_SYSTEM_NAME STREQUAL "Darwin" OR CMAKE_SYSTEM_NAME STREQUAL "iOS")
++if (CMAKE_SYSTEM_NAME STREQUAL "Darwin" OR CMAKE_SYSTEM_NAME MATCHES "iOS|tvOS")
+     enable_language(OBJCXX)
+     set(CMAKE_OBJC_FLAGS "${CMAKE_OBJC_FLAGS} -fobjc-arc")
+     set(CMAKE_OBJCXX_FLAGS "${CMAKE_OBJCXX_FLAGS} -fobjc-arc")
+@@ -56,7 +56,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+     include(cmake/dependencies/mac.cmake)
+ endif()
+ 
+-if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
++if (CMAKE_SYSTEM_NAME MATCHES "iOS|tvOS")
+     include(cmake/dependencies/ios.cmake)
+ endif()
+ 
+@@ -73,7 +73,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
+ endif()
+ 
+ # === Platform Specific Configuration ===
+-if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
++if(CMAKE_SYSTEM_NAME MATCHES "iOS|tvOS")
+     include(cmake/ios-toolchain-populate.cmake)
+ endif()
+ 
+diff --git a/cmake/dependencies/ios.cmake b/cmake/dependencies/ios.cmake
+index aad5c586..c28f8202 100644
+--- a/cmake/dependencies/ios.cmake
++++ b/cmake/dependencies/ios.cmake
+@@ -3,10 +3,14 @@ include(FetchContent)
+ #=================== SDL2 ===================
+ find_package(SDL2 QUIET)
+ if (NOT ${SDL2_FOUND})
++    set(sdl2_ios_controller_menu_press_patch_file ${CMAKE_CURRENT_SOURCE_DIR}/cmake/dependencies/patches/sdl2-ios-controller-menu-press.patch)
++    set(sdl2_ios_controller_menu_press_apply_patch_command ${CMAKE_COMMAND} -Dpatch_file=${sdl2_ios_controller_menu_press_patch_file} -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/dependencies/git-patch.cmake)
++
+     FetchContent_Declare(
+         SDL2
+         GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+         GIT_TAG release-2.32.10
++        PATCH_COMMAND ${sdl2_ios_controller_menu_press_apply_patch_command}
+         OVERRIDE_FIND_PACKAGE
+     )
+     FetchContent_MakeAvailable(SDL2)
+diff --git a/cmake/dependencies/patches/sdl2-ios-controller-menu-press.patch b/cmake/dependencies/patches/sdl2-ios-controller-menu-press.patch
+new file mode 100644
+index 00000000..faa69d08
+--- /dev/null
++++ b/cmake/dependencies/patches/sdl2-ios-controller-menu-press.patch
+@@ -0,0 +1,24 @@
++diff --git a/src/video/uikit/SDL_uikitview.m b/src/video/uikit/SDL_uikitview.m
++index 6147c5f68..3d90fa215 100644
++--- a/src/video/uikit/SDL_uikitview.m
+++++ b/src/video/uikit/SDL_uikitview.m
++@@ -382,8 +382,9 @@
++     }
++ #endif
++
++-#ifndef SDL_JOYSTICK_DISABLED
+++#if TARGET_OS_TV && !defined(SDL_JOYSTICK_DISABLED)
++     /* Presses from Apple TV remote */
+++    /* On iOS, controller B can also arrive as UIPressTypeMenu. */
++     if (!SDL_AppleTVRemoteOpenedAsJoystick) {
++         switch (press.type) {
++         case UIPressTypeUpArrow:
++@@ -407,7 +408,7 @@
++             break;
++         }
++     }
++-#endif /* !SDL_JOYSTICK_DISABLED */
+++#endif /* TARGET_OS_TV && !defined(SDL_JOYSTICK_DISABLED) */
++
++     return SDL_SCANCODE_UNKNOWN;
++ }
+diff --git a/cmake/ios-toolchain-populate.cmake b/cmake/ios-toolchain-populate.cmake
+index eb93fea4..776a8bda 100644
+--- a/cmake/ios-toolchain-populate.cmake
++++ b/cmake/ios-toolchain-populate.cmake
+@@ -1,4 +1,12 @@
+-set(PLATFORM "OS64COMBINED")
++if(SOH_APPLE_TARGET STREQUAL "tvos")
++    if(CMAKE_OSX_SYSROOT MATCHES "simulator")
++        set(PLATFORM "SIMULATORARM64_TVOS")
++    else()
++        set(PLATFORM "TVOS")
++    endif()
++else()
++    set(PLATFORM "OS64COMBINED")
++endif()
+ include(FetchContent)
+ FetchContent_Declare(iostoolchain
+     GIT_REPOSITORY https://github.com/leetal/ios-cmake
+@@ -12,4 +20,4 @@ if(NOT iostoolchain_POPULATED)
+ endif()
+ set(CMAKE_IOS_TOOLCHAIN_FILE ${iostoolchain_SOURCE_DIR}/ios.toolchain.cmake)
+ set_property(GLOBAL PROPERTY IOS_TOOLCHAIN_FILE ${CMAKE_IOS_TOOLCHAIN_FILE})
+-include(${CMAKE_IOS_TOOLCHAIN_FILE})
+\ No newline at end of file
++include(${CMAKE_IOS_TOOLCHAIN_FILE})
+diff --git a/include/fast/backends/gfx_sdl.h b/include/fast/backends/gfx_sdl.h
+index 79042f4e..10f44480 100644
+--- a/include/fast/backends/gfx_sdl.h
++++ b/include/fast/backends/gfx_sdl.h
+@@ -52,10 +52,10 @@ class GfxWindowBackendSDL2 final : public GfxWindowBackend {
+     void OnMouseButtonUp(int btn) const;
+     void SyncFramerateWithTime() const;
+ 
+-    SDL_Window* mWnd;
++    SDL_Window* mWnd = nullptr;
+     SDL_Rect mCursorClip;
+-    SDL_GLContext mCtx;
+-    SDL_Renderer* mRenderer;
++    SDL_GLContext mCtx = nullptr;
++    SDL_Renderer* mRenderer = nullptr;
+     int mSdlToLusTable[512];
+     float mMouseWheelX = 0.0f;
+     float mMouseWheelY = 0.0f;
+@@ -66,5 +66,8 @@ class GfxWindowBackendSDL2 final : public GfxWindowBackend {
+     int mWindowWidth = 640;
+     int mWindowHeight = 480;
+     void (*mOnAllKeysUp)();
++#ifdef __IOS__
++    bool mAppInBackground = false;
++#endif
+ };
+ } // namespace Fast
+diff --git a/include/libultraship/bridge/windowbridge.h b/include/libultraship/bridge/windowbridge.h
+index e1a1f017..5423b122 100644
+--- a/include/libultraship/bridge/windowbridge.h
++++ b/include/libultraship/bridge/windowbridge.h
+@@ -9,6 +9,7 @@ extern "C" {
+ 
+ /** @brief Returns true if the application window is running (has not been closed). */
+ API_EXPORT bool WindowIsRunning();
++API_EXPORT bool WindowIsFrameReady();
+ 
+ /** @brief Returns the current width of the game window in pixels. */
+ API_EXPORT uint32_t WindowGetWidth();
+diff --git a/include/ship/audio/AudioPlayer.h b/include/ship/audio/AudioPlayer.h
+index 6ac86f16..43198dd2 100644
+--- a/include/ship/audio/AudioPlayer.h
++++ b/include/ship/audio/AudioPlayer.h
+@@ -118,6 +118,13 @@ class AudioPlayer {
+      */
+     int32_t GetNumOutputChannels() const;
+ 
++    // Platform lifecycle notifications. Most audio backends do not need
++    // special handling, but mobile Apple audio units must be stopped and
++    // restarted when an application moves between the background and
++    // foreground.
++    virtual void OnApplicationSuspend();
++    virtual void OnApplicationResume();
++
+   protected:
+     /**
+      * @brief Opens and configures the platform audio device.
+diff --git a/include/ship/audio/CoreAudioAudioPlayer.h b/include/ship/audio/CoreAudioAudioPlayer.h
+index edbe9a80..66ed7e7f 100644
+--- a/include/ship/audio/CoreAudioAudioPlayer.h
++++ b/include/ship/audio/CoreAudioAudioPlayer.h
+@@ -30,6 +30,8 @@ class CoreAudioAudioPlayer : public AudioPlayer {
+      * @brief Returns the number of audio frames currently queued in the ring buffer.
+      */
+     int Buffered() override;
++    void OnApplicationSuspend() override;
++    void OnApplicationResume() override;
+ 
+   protected:
+     /**
+@@ -77,6 +79,7 @@ class CoreAudioAudioPlayer : public AudioPlayer {
+     size_t mRingBufferWritePos; ///< Current write position in the ring buffer.
+     pthread_mutex_t mMutex;     ///< Guards concurrent access to the ring buffer.
+     bool mInitialized;
++    bool mOutputRunning;
+ };
+ } // namespace Ship
+ #endif
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 45989b66..62bcaf08 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -55,7 +55,7 @@ add_subdirectory("libultraship")
+ 
+ add_subdirectory("ship")
+ 
+-if (CMAKE_SYSTEM_NAME STREQUAL "Darwin" OR CMAKE_SYSTEM_NAME STREQUAL "iOS")
++if (CMAKE_SYSTEM_NAME STREQUAL "Darwin" OR CMAKE_SYSTEM_NAME MATCHES "iOS|tvOS")
+     set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/ship/utils/AppleFolderManager.mm PROPERTIES COMPILE_FLAGS -fno-objc-arc)
+ endif()
+ 
+@@ -72,7 +72,7 @@ target_include_directories(libultraship
+ 
+ #=================== Linking ===================
+ if(INCLUDE_MPQ_SUPPORT)
+-    if (NOT CMAKE_SYSTEM_NAME STREQUAL "Windows" AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
++    if (NOT CMAKE_SYSTEM_NAME STREQUAL "Windows" AND NOT CMAKE_SYSTEM_NAME MATCHES "iOS|tvOS")
+         target_link_libraries(libultraship PUBLIC "$<LINK_LIBRARY:WHOLE_ARCHIVE,storm>")
+     else()
+         target_link_libraries(libultraship PUBLIC storm)
+@@ -110,7 +110,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+ 
+ endif()
+ 
+-if (CMAKE_SYSTEM_NAME STREQUAL "Darwin" OR CMAKE_SYSTEM_NAME STREQUAL "iOS")
++if (CMAKE_SYSTEM_NAME STREQUAL "Darwin" OR CMAKE_SYSTEM_NAME MATCHES "iOS|tvOS")
+     find_Library(OSX_FOUNDATION Foundation)
+     find_Library(OSX_AVFOUNDATION AVFoundation)
+     find_library(METAL Metal)
+@@ -153,7 +153,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
+     )
+ endif()
+ 
+-if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" OR CMAKE_SYSTEM_NAME STREQUAL "iOS")
++if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" OR CMAKE_SYSTEM_NAME MATCHES "iOS|tvOS")
+     set_target_properties(${PROJECT_NAME} PROPERTIES
+         XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC YES
+     )
+@@ -173,7 +173,7 @@ if(NOT SPDLOG_MIN_CUTOFF IN_LIST LOG_LEVELS)
+     message(FATAL_ERROR "SPDLOG_MIN_CUTOFF must be one of ${LOG_LEVELS}")
+ endif()
+ 
+-if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
++if (CMAKE_SYSTEM_NAME MATCHES "iOS|tvOS")
+     target_compile_definitions(libultraship PRIVATE
+         $<$<CONFIG:Debug>:_DEBUG>
+         $<$<NOT:$<CONFIG:Debug>>:NDEBUG>
+diff --git a/src/fast/CMakeLists.txt b/src/fast/CMakeLists.txt
+index 66bf70d0..210e9aab 100644
+--- a/src/fast/CMakeLists.txt
++++ b/src/fast/CMakeLists.txt
+@@ -31,11 +31,11 @@ if (NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
+     list(FILTER Source_Files__Graphic EXCLUDE REGEX "graphic/Fast3D/backends/dxsdk/*")
+ endif()
+ 
+-if (NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
++if (NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND NOT CMAKE_SYSTEM_NAME MATCHES "iOS|tvOS")
+     list(FILTER Source_Files__Graphic EXCLUDE REGEX "graphic/Fast3D/backends/gfx_metal*")
+ endif()
+ 
+-if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
++if (CMAKE_SYSTEM_NAME MATCHES "iOS|tvOS")
+     list(FILTER Source_Files__Graphic EXCLUDE REGEX "graphic/Fast3D/backends/gfx_opengl*")
+ endif()
+ 
+diff --git a/src/fast/Fast3dGui.cpp b/src/fast/Fast3dGui.cpp
+index 237a502a..1a595b65 100644
+--- a/src/fast/Fast3dGui.cpp
++++ b/src/fast/Fast3dGui.cpp
+@@ -9,6 +9,7 @@
+ #include "fast/resource/type/Texture.h"
+ #include "ship/window/gui/resource/GuiTextureFactory.h"
+ #include "ship/resource/File.h"
++#include <unordered_set>
+ 
+ #ifdef __APPLE__
+ #include <SDL_hints.h>
+@@ -68,12 +69,33 @@ bool Fast3dGui::SupportsViewports() {
+ void Fast3dGui::HandleWindowEvents(Fast::WindowEvent event) {
+     switch (mImpl.Backend) {
+         case WindowBackend::FAST3D_SDL_OPENGL:
+-        case WindowBackend::FAST3D_SDL_METAL:
+-            ImGui_ImplSDL2_ProcessEvent(static_cast<const SDL_Event*>(event.Sdl.Event));
++        case WindowBackend::FAST3D_SDL_METAL: {
++            const SDL_Event* sdlEvent = static_cast<const SDL_Event*>(event.Sdl.Event);
++#if defined(__IOS__) && !defined(__TVOS__)
++            static std::unordered_set<SDL_FingerID> fingers;
++            if (sdlEvent->type == SDL_FINGERDOWN) {
++                fingers.insert(sdlEvent->tfinger.fingerId);
++                if (fingers.size() >= 2) ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, false);
++            } else if (sdlEvent->type == SDL_FINGERUP) {
++                fingers.erase(sdlEvent->tfinger.fingerId);
++            }
++#endif
++            ImGui_ImplSDL2_ProcessEvent(sdlEvent);
++#if defined(__IOS__) && !defined(__TVOS__)
++            if (fingers.size() >= 2 && sdlEvent->type == SDL_FINGERMOTION) {
++                ImGui::GetIO().AddMouseSourceEvent(ImGuiMouseSource_TouchScreen);
++                ImGui::GetIO().AddMouseWheelEvent(0.0f, sdlEvent->tfinger.dy * ImGui::GetIO().DisplaySize.y / 24.0f);
++            } else if (fingers.size() < 2 && sdlEvent->type == SDL_MOUSEMOTION &&
++                       sdlEvent->motion.which == SDL_TOUCH_MOUSEID &&
++                       (sdlEvent->motion.state & SDL_BUTTON_LMASK) && !ImGui::IsAnyItemActive()) {
++                ImGui::GetIO().AddMouseWheelEvent(0.0f, sdlEvent->motion.yrel / 24.0f);
++            }
++#endif
+ #if defined(__ANDROID__) || defined(__IOS__)
+             Ship::Mobile::ImGuiProcessEvent(ImGui::GetIO().WantTextInput);
+ #endif
+             break;
++        }
+ #ifdef ENABLE_DX11
+         case WindowBackend::FAST3D_DXGI_DX11:
+             ImGui_ImplWin32_WndProcHandler(static_cast<HWND>(event.Win32.Handle), event.Win32.Msg, event.Win32.Param1,
+@@ -226,6 +248,16 @@ void Fast3dGui::ImGuiWMNewFrame() {
+         case WindowBackend::FAST3D_SDL_OPENGL:
+         case WindowBackend::FAST3D_SDL_METAL:
+             ImGui_ImplSDL2_NewFrame();
++#ifdef __IOS__
++            if (mImpl.Backend == WindowBackend::FAST3D_SDL_METAL && mImpl.Metal.Renderer && mImpl.Metal.Window) {
++                int width = 0, height = 0, pixelsX = 0, pixelsY = 0;
++                SDL_GetWindowSize(static_cast<SDL_Window*>(mImpl.Metal.Window), &width, &height);
++                SDL_GetRendererOutputSize(mImpl.Metal.Renderer, &pixelsX, &pixelsY);
++                if (width > 0 && height > 0) {
++                    mImGuiIo->DisplayFramebufferScale = ImVec2(float(pixelsX) / width, float(pixelsY) / height);
++                }
++            }
++#endif
+             break;
+ #ifdef ENABLE_DX11
+         case WindowBackend::FAST3D_DXGI_DX11:
+@@ -320,8 +352,14 @@ void Fast3dGui::CalculateGameViewport() {
+     mainPos.y -= mTemporaryWindowPos.y;
+     ImVec2 size = ImGui::GetContentRegionAvail();
+     const auto interpreter = mInterpreter.lock().get();
+-    interpreter->mCurDimensions.width = (uint32_t)(size.x * mInterpreter.lock()->mCurDimensions.internal_mul);
+-    interpreter->mCurDimensions.height = (uint32_t)(size.y * mInterpreter.lock()->mCurDimensions.internal_mul);
++#ifdef __IOS__
++    const ImVec2 framebufferScale(std::max(1.0f, mImGuiIo->DisplayFramebufferScale.x),
++                                std::max(1.0f, mImGuiIo->DisplayFramebufferScale.y));
++#else
++    const ImVec2 framebufferScale(1.0f, 1.0f);
++#endif
++    interpreter->mCurDimensions.width = (uint32_t)(size.x * framebufferScale.x * interpreter->mCurDimensions.internal_mul);
++    interpreter->mCurDimensions.height = (uint32_t)(size.y * framebufferScale.y * interpreter->mCurDimensions.internal_mul);
+     interpreter->mGameWindowViewport.x = (int16_t)mainPos.x;
+     interpreter->mGameWindowViewport.y = (int16_t)mainPos.y;
+     interpreter->mGameWindowViewport.width = (int16_t)size.x;
+@@ -375,6 +413,7 @@ void Fast3dGui::DrawGame() {
+ 
+     ImVec2 mainPos = ImGui::GetWindowPos();
+     ImVec2 size = ImGui::GetContentRegionAvail();
++    const ImVec2 availableSize = size;
+     ImVec2 pos = ImVec2(0, 0);
+     const auto interpreter = mInterpreter.lock().get();
+ 
+@@ -414,6 +453,13 @@ void Fast3dGui::DrawGame() {
+                           float(interpreter->mCurDimensions.height) * factor);
+         }
+     }
++#ifdef __IOS__
++    if (size.x > availableSize.x || size.y > availableSize.y || pos.x < 0.0f || pos.y < 0.0f) {
++        const float fit = std::min(availableSize.x / size.x, availableSize.y / size.y);
++        size = ImVec2(floor(size.x * fit), floor(size.y * fit));
++        pos = ImVec2(floor((availableSize.x - size.x) * .5f), floor((availableSize.y - size.y) * .5f));
++    }
++#endif
+     uintptr_t fb = Ship::Context::GetRawInstance()->GetWindow()->GetGfxFrameBuffer();
+     if (fb) {
+         ImGui::SetCursorPos(pos);
+diff --git a/src/fast/backends/gfx_sdl2.cpp b/src/fast/backends/gfx_sdl2.cpp
+index 15c5415f..94a87d43 100644
+--- a/src/fast/backends/gfx_sdl2.cpp
++++ b/src/fast/backends/gfx_sdl2.cpp
+@@ -39,6 +39,10 @@
+ #include "ship/window/gui/Gui.h"
+ #include "fast/Fast3dGui.h"
+ 
++#ifdef __IOS__
++#include "ship/audio/Audio.h"
++#endif
++
+ #ifdef _WIN32
+ #include <WTypesbase.h>
+ #include <Windows.h>
+@@ -235,7 +239,7 @@ void GfxWindowBackendSDL2::SetFullscreenImpl(bool on, bool call_callback) {
+         }
+     }
+ 
+-#if defined(__APPLE__)
++#if defined(__APPLE__) && !defined(__IOS__)
+     // Implement fullscreening with native macOS APIs
+     if (on != isNativeMacOSFullscreenActive(mWnd)) {
+         toggleNativeMacOSFullscreen(mWnd);
+@@ -374,7 +378,8 @@ void GfxWindowBackendSDL2::Init(const char* gameName, const char* gfxApiName, bo
+     int len = snprintf(title, sizeof(title), "%s (%s)", gameName, gfxApiName);
+ 
+ #ifdef __IOS__
+-    Uint32 flags = SDL_WINDOW_BORDERLESS | SDL_WINDOW_SHOWN;
++    // Use the native-density drawable for the iOS menu presentation path.
++    Uint32 flags = SDL_WINDOW_BORDERLESS | SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI;
+ #else
+     Uint32 flags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
+ #endif
+@@ -525,8 +530,12 @@ void GfxWindowBackendSDL2::SetMouseCallbacks(bool (*onMouseButtonDown)(int btn),
+ }
+ 
+ void GfxWindowBackendSDL2::GetDimensions(uint32_t* width, uint32_t* height, int32_t* posX, int32_t* posY) {
+-#ifdef __APPLE__
+-    SDL_GetWindowSize(mWnd, static_cast<int*>((void*)width), static_cast<int*>((void*)height));
++#if defined(__APPLE__)
++    if (mRenderer != nullptr) {
++        SDL_GetRendererOutputSize(mRenderer, static_cast<int*>((void*)width), static_cast<int*>((void*)height));
++    } else {
++        SDL_GetWindowSize(mWnd, static_cast<int*>((void*)width), static_cast<int*>((void*)height));
++    }
+ #else
+     SDL_GL_GetDrawableSize(mWnd, static_cast<int*>((void*)width), static_cast<int*>((void*)height));
+ #endif
+@@ -616,7 +625,165 @@ void GfxWindowBackendSDL2::HandleSingleEvent(SDL_Event& event) {
+             sWarnedOnce = true;
+         }
+     }
++#ifdef __TVOS__
++    // ImGui's SDL backend polls controllers it has opened itself. On tvOS the
++    // game controller can be available to SoH while absent from that private
++    // list, leaving the menu visible but inert. Feed the standardized SDL
++    // controller events directly into ImGui's navigation queue.
++    if (event.type == SDL_CONTROLLERBUTTONDOWN || event.type == SDL_CONTROLLERBUTTONUP) {
++        const bool pressed = event.type == SDL_CONTROLLERBUTTONDOWN;
++        ImGuiKey key = ImGuiKey_None;
++        switch (event.cbutton.button) {
++            case SDL_CONTROLLER_BUTTON_A:
++                key = ImGuiKey_GamepadFaceDown;
++                break;
++            case SDL_CONTROLLER_BUTTON_B:
++                key = ImGuiKey_GamepadFaceRight;
++                break;
++            case SDL_CONTROLLER_BUTTON_X:
++                key = ImGuiKey_GamepadFaceLeft;
++                break;
++            case SDL_CONTROLLER_BUTTON_Y:
++                key = ImGuiKey_GamepadFaceUp;
++                break;
++            case SDL_CONTROLLER_BUTTON_DPAD_UP:
++                key = ImGuiKey_GamepadDpadUp;
++                break;
++            case SDL_CONTROLLER_BUTTON_DPAD_DOWN:
++                key = ImGuiKey_GamepadDpadDown;
++                break;
++            case SDL_CONTROLLER_BUTTON_DPAD_LEFT:
++                key = ImGuiKey_GamepadDpadLeft;
++                break;
++            case SDL_CONTROLLER_BUTTON_DPAD_RIGHT:
++                key = ImGuiKey_GamepadDpadRight;
++                break;
++            case SDL_CONTROLLER_BUTTON_LEFTSHOULDER:
++                key = ImGuiKey_GamepadL1;
++                break;
++            case SDL_CONTROLLER_BUTTON_RIGHTSHOULDER:
++                key = ImGuiKey_GamepadR1;
++                break;
++            default:
++                break;
++        }
++        if (key != ImGuiKey_None) {
++            ImGui::GetIO().AddKeyEvent(key, pressed);
++        }
++    } else if (event.type == SDL_CONTROLLERAXISMOTION) {
++        constexpr float deadzone = 0.35f;
++        const float value = event.caxis.value / 32767.0f;
++        switch (event.caxis.axis) {
++            case SDL_CONTROLLER_AXIS_LEFTX:
++                ImGui::GetIO().AddKeyAnalogEvent(ImGuiKey_GamepadLStickLeft, value < -deadzone,
++                                                 value < 0.0f ? -value : 0.0f);
++                ImGui::GetIO().AddKeyAnalogEvent(ImGuiKey_GamepadLStickRight, value > deadzone,
++                                                 value > 0.0f ? value : 0.0f);
++                break;
++            case SDL_CONTROLLER_AXIS_LEFTY:
++                ImGui::GetIO().AddKeyAnalogEvent(ImGuiKey_GamepadLStickUp, value < -deadzone,
++                                                 value < 0.0f ? -value : 0.0f);
++                ImGui::GetIO().AddKeyAnalogEvent(ImGuiKey_GamepadLStickDown, value > deadzone,
++                                                 value > 0.0f ? value : 0.0f);
++                break;
++            default:
++                break;
++        }
++    } else if (event.type == SDL_JOYAXISMOTION) {
++        SDL_Joystick* joystick = SDL_JoystickFromInstanceID(event.jaxis.which);
++        const char* joystickName = joystick != nullptr ? SDL_JoystickName(joystick) : nullptr;
++        if (joystickName != nullptr && strstr(joystickName, "Siri Remote") != nullptr) {
++            constexpr float deadzone = 0.35f;
++            const float value = event.jaxis.value / 32767.0f;
++            if (event.jaxis.axis == 0) {
++                ImGui::GetIO().AddKeyAnalogEvent(ImGuiKey_GamepadLStickLeft, value < -deadzone,
++                                                 value < 0.0f ? -value : 0.0f);
++                ImGui::GetIO().AddKeyAnalogEvent(ImGuiKey_GamepadLStickRight, value > deadzone,
++                                                 value > 0.0f ? value : 0.0f);
++            } else if (event.jaxis.axis == 1) {
++                ImGui::GetIO().AddKeyAnalogEvent(ImGuiKey_GamepadLStickUp, value < -deadzone,
++                                                 value < 0.0f ? -value : 0.0f);
++                ImGui::GetIO().AddKeyAnalogEvent(ImGuiKey_GamepadLStickDown, value > deadzone,
++                                                 value > 0.0f ? value : 0.0f);
++            }
++        }
++    } else if (event.type == SDL_JOYBUTTONDOWN || event.type == SDL_JOYBUTTONUP) {
++        SDL_Joystick* joystick = SDL_JoystickFromInstanceID(event.jbutton.which);
++        const char* joystickName = joystick != nullptr ? SDL_JoystickName(joystick) : nullptr;
++        if (joystickName != nullptr && strstr(joystickName, "Siri Remote") != nullptr) {
++            const bool pressed = event.type == SDL_JOYBUTTONDOWN;
++            if (event.jbutton.button == 0) {
++                ImGui::GetIO().AddKeyEvent(ImGuiKey_GamepadFaceDown, pressed);
++            } else if (event.jbutton.button == 1) {
++                ImGui::GetIO().AddKeyEvent(ImGuiKey_GamepadFaceRight, pressed);
++            }
++        }
++    }
++
++    if (event.type == SDL_CONTROLLERBUTTONDOWN) {
++        bool toggleMenu = event.cbutton.button == SDL_CONTROLLER_BUTTON_BACK;
++
++        // Apple exposes a separately connected left Joy-Con's minus button as
++        // Start. A paired Joy-Con controller correctly exposes minus as Back,
++        // so only apply this fallback to the standalone left controller.
++        if (event.cbutton.button == SDL_CONTROLLER_BUTTON_START) {
++            SDL_GameController* controller = SDL_GameControllerFromInstanceID(event.cbutton.which);
++            const char* controllerName = controller != nullptr ? SDL_GameControllerName(controller) : nullptr;
++            toggleMenu = controllerName != nullptr && strstr(controllerName, "Joy-Con (L)") != nullptr;
++        }
++
++        if (toggleMenu) {
++            auto gui = Ship::Context::GetRawInstance()->GetWindow()->GetGui();
++            if (gui->GetMenu()) {
++                gui->GetMenu()->ToggleVisibility();
++                Ship::Context::GetRawInstance()->GetWindow()->GetMouseStateManager()->UpdateMouseCapture();
++                if (gui->GetMenuOrMenubarVisible()) {
++                    ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
++                } else {
++                    ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NavEnableGamepad;
++                }
++            }
++        }
++    }
++#endif
+     switch (event.type) {
++#ifdef __IOS__
++        case SDL_APP_WILLENTERBACKGROUND: {
++            mAppInBackground = true;
++            previous_time = 0;
++            auto audio = Ship::Context::GetInstance()->GetAudio();
++            if (audio != nullptr && audio->GetAudioPlayer() != nullptr) {
++                audio->GetAudioPlayer()->OnApplicationSuspend();
++            }
++            break;
++        }
++        case SDL_APP_DIDENTERBACKGROUND:
++        case SDL_APP_WILLENTERFOREGROUND:
++            // Stay suspended until SDL reports that the app is interactive.
++            mAppInBackground = true;
++            break;
++        case SDL_APP_DIDENTERFOREGROUND: {
++            // Refresh every piece of state that can become stale while UIKit
++            // owns the screen. In particular, reset the manual frame clock so
++            // it cannot inherit a background interval.
++            previous_time = 0;
++            if (mRenderer != nullptr) {
++                SDL_GetRendererOutputSize(mRenderer, &mWindowWidth, &mWindowHeight);
++                SDL_RenderSetVSync(mRenderer, mVsyncEnabled ? 1 : 0);
++            } else {
++                SDL_GetWindowSize(mWnd, &mWindowWidth, &mWindowHeight);
++                SDL_GL_MakeCurrent(mWnd, mCtx);
++                SDL_GL_SetSwapInterval(mVsyncEnabled ? 1 : 0);
++            }
++
++            auto audio = Ship::Context::GetInstance()->GetAudio();
++            if (audio != nullptr && audio->GetAudioPlayer() != nullptr) {
++                audio->GetAudioPlayer()->OnApplicationResume();
++            }
++            mAppInBackground = false;
++            break;
++        }
++#endif
+ #ifndef TARGET_WEB
+         // Scancodes are broken in Emscripten SDL2: https://bugzilla.libsdl.org/show_bug.cgi?id=3259
+         case SDL_KEYDOWN:
+@@ -640,7 +807,11 @@ void GfxWindowBackendSDL2::HandleSingleEvent(SDL_Event& event) {
+             switch (event.window.event) {
+                 case SDL_WINDOWEVENT_SIZE_CHANGED:
+ #ifdef __APPLE__
+-                    SDL_GetWindowSize(mWnd, &mWindowWidth, &mWindowHeight);
++                    if (mRenderer != nullptr) {
++                        SDL_GetRendererOutputSize(mRenderer, &mWindowWidth, &mWindowHeight);
++                    } else {
++                        SDL_GetWindowSize(mWnd, &mWindowWidth, &mWindowHeight);
++                    }
+ #else
+                     SDL_GL_GetDrawableSize(mWnd, &mWindowWidth, &mWindowHeight);
+ #endif
+@@ -674,7 +845,7 @@ void GfxWindowBackendSDL2::HandleEvents() {
+     }
+ 
+     // resync fullscreen state
+-#ifdef __APPLE__
++#if defined(__APPLE__) && !defined(__IOS__)
+     auto nextFullscreenState = isNativeMacOSFullscreenActive(mWnd);
+     if (mFullScreen != nextFullscreenState) {
+         mFullScreen = nextFullscreenState;
+@@ -686,7 +857,11 @@ void GfxWindowBackendSDL2::HandleEvents() {
+ }
+ 
+ bool GfxWindowBackendSDL2::IsFrameReady() {
++#ifdef __IOS__
++    return !mAppInBackground;
++#else
+     return true;
++#endif
+ }
+ 
+ static uint64_t qpc_to_100ns(uint64_t qpc) {
+diff --git a/src/libultraship/bridge/windowbridge.cpp b/src/libultraship/bridge/windowbridge.cpp
+index 295c4dc2..79ec4565 100644
+--- a/src/libultraship/bridge/windowbridge.cpp
++++ b/src/libultraship/bridge/windowbridge.cpp
+@@ -2,6 +2,9 @@
+ #include "ship/window/Window.h"
+ #include "ship/Context.h"
+ 
++#include <chrono>
++#include <thread>
++
+ extern "C" {
+ 
+ uint32_t WindowGetWidth() {
+@@ -20,6 +23,16 @@ bool WindowIsRunning() {
+     return Ship::Context::GetRawInstance()->GetWindow()->IsRunning();
+ }
+ 
++bool WindowIsFrameReady() {
++    auto window = Ship::Context::GetRawInstance()->GetWindow();
++    window->HandleEvents();
++    const bool ready = window->IsRunning() && window->IsFrameReady();
++    if (!ready) {
++        std::this_thread::sleep_for(std::chrono::milliseconds(16));
++    }
++    return ready;
++}
++
+ int32_t WindowGetPosX() {
+     return Ship::Context::GetRawInstance()->GetWindow()->GetPosX();
+ }
+diff --git a/src/ship/CMakeLists.txt b/src/ship/CMakeLists.txt
+index e37a3a1d..25444812 100644
+--- a/src/ship/CMakeLists.txt
++++ b/src/ship/CMakeLists.txt
+@@ -13,7 +13,7 @@ if (NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
+     list(FILTER Source_Files__Audio EXCLUDE REGEX "audio/WasapiAudioPlayer.*")
+ endif()
+ 
+-if (NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin")
++if (NOT CMAKE_SYSTEM_NAME MATCHES "Darwin|iOS|tvOS")
+     list(FILTER Source_Files__Audio EXCLUDE REGEX "audio/CoreAudioAudioPlayer.*")
+ endif()
+ 
+@@ -59,7 +59,7 @@ target_sources(libultraship PRIVATE ${Source_Files__Window__Gui})
+ 
+ file(GLOB_RECURSE Source_Files__Utils RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "utils/*.cpp" "utils/*.c")
+ 
+-if (CMAKE_SYSTEM_NAME STREQUAL "Darwin" OR CMAKE_SYSTEM_NAME STREQUAL "iOS")
++if (CMAKE_SYSTEM_NAME STREQUAL "Darwin" OR CMAKE_SYSTEM_NAME MATCHES "iOS|tvOS")
+     list(APPEND Source_Files__Utils ${CMAKE_CURRENT_SOURCE_DIR}/utils/AppleFolderManager.mm)
+ endif()
+ 
+@@ -94,7 +94,7 @@ endif()
+ 
+ #=================== Port ===================
+ 
+-if (CMAKE_SYSTEM_NAME STREQUAL "Android" OR CMAKE_SYSTEM_NAME STREQUAL "iOS")
++if (CMAKE_SYSTEM_NAME STREQUAL "Android" OR CMAKE_SYSTEM_NAME MATCHES "iOS|tvOS")
+     set(Source_Files__Port
+         ${CMAKE_CURRENT_SOURCE_DIR}/port/mobile/MobileImpl.cpp
+     )
+diff --git a/src/ship/Context.cpp b/src/ship/Context.cpp
+index 28a211f1..3373abcd 100644
+--- a/src/ship/Context.cpp
++++ b/src/ship/Context.cpp
+@@ -489,8 +489,30 @@ std::string Context::GetAppBundlePath() {
+ #endif
+ 
+ #ifdef __IOS__
+-    const char* home = getenv("HOME");
+-    return std::string(home) + "/Documents";
++    // The SDL base path can change after an unsigned IPA is re-signed. Use the
++    // canonical Apple resource directory first and retain SDL as a fallback.
++    FolderManager iosFolderManager;
++    const char* bundlePath = iosFolderManager.getMainBundlePath();
++    if (bundlePath != nullptr && bundlePath[0] != '\0') {
++        std::string result(bundlePath);
++        while (result.size() > 1 && result.back() == '/') {
++            result.pop_back();
++        }
++        std::error_code error;
++        if (std::filesystem::exists(result, error) && !error) {
++            return result;
++        }
++    }
++
++    char* basePath = SDL_GetBasePath();
++    if (basePath != nullptr) {
++        std::string result(basePath);
++        SDL_free(basePath);
++        while (result.size() > 1 && result.back() == '/') result.pop_back();
++        std::error_code error;
++        if (std::filesystem::exists(result, error) && !error) return result;
++    }
++    return ".";
+ #endif
+ 
+ #ifdef NON_PORTABLE
+@@ -551,9 +573,12 @@ std::string Context::GetAppDirectoryPath(const std::string& appName) {
+     }
+ #endif
+ 
+-#ifdef __IOS__
++#if defined(__TVOS__)
++    const char* home = getenv("HOME");
++    return std::string(home ? home : ".") + "/Library/Caches/Ship of Harkinian";
++#elif defined(__IOS__)
+     const char* home = getenv("HOME");
+-    return std::string(home) + "/Documents";
++    return std::string(home ? home : ".") + "/Documents";
+ #endif
+ 
+ #if defined(__APPLE__)
+diff --git a/src/ship/audio/AudioPlayer.cpp b/src/ship/audio/AudioPlayer.cpp
+index 037f1b48..6bc9776f 100644
+--- a/src/ship/audio/AudioPlayer.cpp
++++ b/src/ship/audio/AudioPlayer.cpp
+@@ -87,6 +87,12 @@ int32_t AudioPlayer::GetNumOutputChannels() const {
+     }
+ }
+ 
++void AudioPlayer::OnApplicationSuspend() {
++}
++
++void AudioPlayer::OnApplicationResume() {
++}
++
+ void AudioPlayer::Play(const uint8_t* buf, size_t len) {
+     if (mAudioSettings.ChannelSetting != AudioChannelsSetting::audioMatrix51) {
+         // Stereo or Raw 5.1 passthrough
+diff --git a/src/ship/audio/CoreAudioAudioPlayer.cpp b/src/ship/audio/CoreAudioAudioPlayer.cpp
+index 489273b6..fc75c880 100644
+--- a/src/ship/audio/CoreAudioAudioPlayer.cpp
++++ b/src/ship/audio/CoreAudioAudioPlayer.cpp
+@@ -5,7 +5,8 @@
+ 
+ namespace Ship {
+ 
+-CoreAudioAudioPlayer::CoreAudioAudioPlayer(AudioSettings settings) : AudioPlayer(settings), mInitialized(false) {
++CoreAudioAudioPlayer::CoreAudioAudioPlayer(AudioSettings settings)
++    : AudioPlayer(settings), mInitialized(false), mOutputRunning(false) {
+     pthread_mutex_init(&mMutex, NULL);
+ }
+ 
+@@ -17,7 +18,10 @@ CoreAudioAudioPlayer::~CoreAudioAudioPlayer() {
+ 
+ void CoreAudioAudioPlayer::DoClose() {
+     if (mInitialized) {
+-        AudioOutputUnitStop(mAudioUnit);
++        if (mOutputRunning) {
++            AudioOutputUnitStop(mAudioUnit);
++            mOutputRunning = false;
++        }
+         AudioUnitUninitialize(mAudioUnit);
+         AudioComponentInstanceDispose(mAudioUnit);
+         mInitialized = false;
+@@ -44,7 +48,11 @@ bool CoreAudioAudioPlayer::DoInit() {
+ 
+     AudioComponentDescription desc;
+     desc.componentType = kAudioUnitType_Output;
++#ifdef __IOS__
++    desc.componentSubType = kAudioUnitSubType_RemoteIO;
++#else
+     desc.componentSubType = kAudioUnitSubType_HALOutput;
++#endif
+     desc.componentManufacturer = kAudioUnitManufacturer_Apple;
+     desc.componentFlags = 0;
+     desc.componentFlagsMask = 0;
+@@ -110,9 +118,52 @@ bool CoreAudioAudioPlayer::DoInit() {
+     }
+ 
+     mInitialized = true;
++    mOutputRunning = true;
+     return true;
+ }
+ 
++void CoreAudioAudioPlayer::OnApplicationSuspend() {
++#ifdef __IOS__
++    if (!mInitialized || !mOutputRunning) {
++        return;
++    }
++
++    OSStatus status = AudioOutputUnitStop(mAudioUnit);
++    if (status != noErr) {
++        SPDLOG_WARN("CoreAudio: Failed to stop audio unit while backgrounding: {}", status);
++    }
++    mOutputRunning = false;
++
++    // Audio callbacks stop while the application is suspended. Discard the
++    // queued samples so foreground playback starts at the current game state
++    // instead of draining stale audio.
++    pthread_mutex_lock(&mMutex);
++    mRingBufferReadPos = 0;
++    mRingBufferWritePos = 0;
++    pthread_mutex_unlock(&mMutex);
++#endif
++}
++
++void CoreAudioAudioPlayer::OnApplicationResume() {
++#ifdef __IOS__
++    if (!mInitialized || mOutputRunning) {
++        return;
++    }
++
++    pthread_mutex_lock(&mMutex);
++    mRingBufferReadPos = 0;
++    mRingBufferWritePos = 0;
++    pthread_mutex_unlock(&mMutex);
++
++    OSStatus status = AudioOutputUnitStart(mAudioUnit);
++    if (status != noErr) {
++        SPDLOG_ERROR("CoreAudio: Failed to restart audio unit after foregrounding: {}", status);
++        return;
++    }
++    mOutputRunning = true;
++#endif
++}
++
+ int CoreAudioAudioPlayer::Buffered() {
+     pthread_mutex_lock(&mMutex);
+     size_t buffered;
+diff --git a/src/ship/window/gui/Gui.cpp b/src/ship/window/gui/Gui.cpp
+index 1f9279bd..066f8325 100644
+--- a/src/ship/window/gui/Gui.cpp
++++ b/src/ship/window/gui/Gui.cpp
+@@ -65,7 +65,11 @@ void Gui::Init() {
+     mImGuiIo->ConfigFlags |= ImGuiConfigFlags_DockingEnable | ImGuiConfigFlags_NoMouseCursorChange;
+ 
+     // Add Font Awesome and merge it into the default font.
+-    mImGuiIo->Fonts->AddFontDefault();
++    ImFontConfig defaultFontConfig;
++#ifdef __IOS__
++    defaultFontConfig.RasterizerDensity = 3.0f;
++#endif
++    mImGuiIo->Fonts->AddFontDefault(&defaultFontConfig);
+     // This must match the default font size, which is 13.0f.
+     float baseFontSize = 13.0f;
+     // FontAwesome fonts need to have their sizes reduced by 2.0f/3.0f in order to align correctly
+@@ -75,6 +79,9 @@ void Gui::Init() {
+     iconsConfig.MergeMode = true;
+     iconsConfig.PixelSnapH = true;
+     iconsConfig.GlyphMinAdvanceX = iconFontSize;
++#ifdef __IOS__
++    iconsConfig.RasterizerDensity = 3.0f;
++#endif
+     mImGuiIo->Fonts->AddFontFromMemoryCompressedBase85TTF(fontawesome_compressed_data_base85, iconFontSize,
+                                                           &iconsConfig, sIconsRanges);
+ 
+@@ -82,6 +89,9 @@ void Gui::Init() {
+     // Scale everything by 2 for Android
+     ImGui::GetStyle().ScaleAllSizes(2.0f);
+     mImGuiIo->FontGlobalScale = 2.0f;
++#elif defined(__IOS__)
++    mImGuiIo->ConfigFlags |= ImGuiConfigFlags_IsTouchScreen;
++    mImGuiIo->MouseDragThreshold = 12.0f;
+ #endif
+ 
+     mImGuiIniPath = Context::GetPathRelativeToAppDirectory("imgui.ini");
+@@ -202,7 +212,11 @@ void Gui::DrawMenu() {
+ 
+     const ImGuiViewport* viewport = ImGui::GetMainViewport();
+     ImGui::SetNextWindowPos(viewport->WorkPos);
++#ifdef __IOS__
++    ImGui::SetNextWindowSize(viewport->WorkSize);
++#else
+     ImGui::SetNextWindowSize(ImVec2((int)wnd->GetWidth(), (int)wnd->GetHeight()));
++#endif
+     ImGui::SetNextWindowViewport(viewport->ID);
+     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+@@ -226,9 +240,13 @@ void Gui::DrawMenu() {
+ 
+     ImGui::DockSpace(dockId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None | ImGuiDockNodeFlags_NoDockingInCentralNode);
+ 
+-    if (ImGui::IsKeyPressed(TOGGLE_BTN, false) || ImGui::IsKeyPressed(ImGuiKey_Escape, false) ||
++    if (ImGui::IsKeyPressed(TOGGLE_BTN, false) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)
++#ifndef __TVOS__
++        ||
+         (ImGui::IsKeyPressed(TOGGLE_PAD_BTN, false) &&
+-         Ship::Context::GetRawInstance()->GetConsoleVariables()->GetInteger(CVAR_IMGUI_CONTROLLER_NAV, 0))) {
++         Ship::Context::GetRawInstance()->GetConsoleVariables()->GetInteger(CVAR_IMGUI_CONTROLLER_NAV, 0))
++#endif
++    ) {
+         if ((ImGui::IsKeyPressed(ImGuiKey_Escape, false) || ImGui::IsKeyPressed(TOGGLE_PAD_BTN, false)) && GetMenu()) {
+             GetMenu()->ToggleVisibility();
+         } else if ((ImGui::IsKeyPressed(TOGGLE_BTN, false) || ImGui::IsKeyPressed(TOGGLE_PAD_BTN, false)) &&
+@@ -286,8 +304,14 @@ void Gui::HandleMouseCapture() {
+ 
+ void Gui::StartFrame() {
+     HandleMouseCapture();
++#ifdef __TVOS__
++    RefreshImGuiGamepads();
++#endif
+     ImGuiBackendNewFrame();
+     ImGuiWMNewFrame();
++#ifdef __TVOS__
++    mImGuiIo->BackendFlags |= ImGuiBackendFlags_HasGamepad;
++#endif
+     ImGui::NewFrame();
+ }
+ 

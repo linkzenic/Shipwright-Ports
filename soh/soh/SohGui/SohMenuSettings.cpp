@@ -364,6 +364,21 @@ void SohMenu::AddMenuSettings() {
         .RaceDisable(false)
         .Options(CheckboxOptions().Tooltip(
             "Search input box gets autofocus when visible. Does not affect using other widgets."));
+#if defined(__IOS__) && !defined(__TVOS__)
+    AddWidget(path, "Touch Face Buttons", WIDGET_CVAR_COMBOBOX)
+        .CVar(CVAR_SETTING("TouchControls.FaceButtonLayout"))
+        .RaceDisable(false)
+        .Callback([](WidgetInfo&) {
+            SOHiOS_SetFaceButtonLayout(CVarGetInteger(CVAR_SETTING("TouchControls.FaceButtonLayout"), 0));
+        })
+        .Options(ComboboxOptions().ComboMap(touchFaceButtonLayoutMap).DefaultIndex(0));
+    AddWidget(path, "Disable Touch Controls", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_SETTING("TouchControls.Disabled"))
+        .RaceDisable(false)
+        .Callback([](WidgetInfo&) {
+            SOHiOS_SetTouchControlsEnabled(CVarGetInteger(CVAR_SETTING("TouchControls.Disabled"), 0) == 0);
+        });
+#endif
     AddWidget(path, "Reset Button Combination:", WIDGET_CVAR_BTN_SELECTOR)
         .CVar("gSettings.ResetBtn")
         .Options(BtnSelectorOptions().DefaultValue(BTN_CUSTOM_MODIFIER2));

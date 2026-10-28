@@ -56,6 +56,16 @@ if [ ! -f "$ROOT/soh/soh.o2r" ]; then
     exit 1
 fi
 
+# Keep Apple support reproducible on the same engine revision as Android.
+# Refuse partial or mismatched changes instead of overwriting a working tree.
+APPLE_ENGINE_PATCH="$ROOT/CMake/patches/libultraship-apple.patch"
+if git -C "$ROOT/libultraship" apply --check "$APPLE_ENGINE_PATCH" 2>/dev/null; then
+    git -C "$ROOT/libultraship" apply "$APPLE_ENGINE_PATCH"
+elif ! git -C "$ROOT/libultraship" apply --reverse --check "$APPLE_ENGINE_PATCH" 2>/dev/null; then
+    echo "Apple engine support does not match this checkout. Use a clean engine at the pinned revision." >&2
+    exit 1
+fi
+
 set -- cmake -Wno-unused-cli \
     -S "$ROOT" -B "$BUILD_DIR" \
     -GXcode \
