@@ -544,7 +544,7 @@ index 15c5415f..94a87d43 100644
 +        case SDL_APP_WILLENTERBACKGROUND: {
 +            mAppInBackground = true;
 +            previous_time = 0;
-+            auto audio = Ship::Context::GetInstance()->GetAudio();
++            auto audio = Ship::Context::GetRawInstance()->GetAudio();
 +            if (audio != nullptr && audio->GetAudioPlayer() != nullptr) {
 +                audio->GetAudioPlayer()->OnApplicationSuspend();
 +            }
@@ -569,7 +569,7 @@ index 15c5415f..94a87d43 100644
 +                SDL_GL_SetSwapInterval(mVsyncEnabled ? 1 : 0);
 +            }
 +
-+            auto audio = Ship::Context::GetInstance()->GetAudio();
++            auto audio = Ship::Context::GetRawInstance()->GetAudio();
 +            if (audio != nullptr && audio->GetAudioPlayer() != nullptr) {
 +                audio->GetAudioPlayer()->OnApplicationResume();
 +            }

@@ -382,6 +382,18 @@ FetchContent_MakeAvailable(dr_libs)
 
 if(ANDROID)
     include(${CMAKE_SOURCE_DIR}/CMake/AndroidAudio.cmake)
+elseif(CMAKE_SYSTEM_NAME MATCHES "iOS|tvOS")
+    # Network is part of the shared 9.3 engine even when remote control is off.
+    set(SDL2NET_SAMPLES OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(SDL2_net
+        GIT_REPOSITORY https://github.com/libsdl-org/SDL_net.git
+        GIT_TAG release-2.2.0)
+    FetchContent_MakeAvailable(SDL2_net)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/sdl_net_compat/SDL2")
+    file(COPY "${sdl2_net_SOURCE_DIR}/SDL_net.h"
+        DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/sdl_net_compat/SDL2")
+    target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE
+        "${CMAKE_CURRENT_BINARY_DIR}/sdl_net_compat")
 else()
 find_package(SDL2)
 set(SDL2-INCLUDE ${SDL2_INCLUDE_DIRS})
@@ -795,7 +807,7 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "CafeOS")
 elseif(CMAKE_SYSTEM_NAME MATCHES "iOS|tvOS")
     find_package(Threads REQUIRED)
     set(ADDITIONAL_LIBRARY_DEPENDENCIES
-        libultraship torch SDL2::SDL2-static SDL2::SDL2main
+        libultraship torch SDL2::SDL2-static SDL2::SDL2main SDL2_net
         Ogg::ogg Vorbis::vorbis Vorbis::vorbisenc Vorbis::vorbisfile
         Opus::opus OpusFile::opusfile Threads::Threads)
 elseif(ANDROID)
