@@ -37,9 +37,9 @@ REQUIRED_BUNDLE_ITEMS=(
     "Ship of Harkinian"
     "Info.plist"
     "soh.o2r"
-    "assets/Config_N64_NTSC_10.xml"
-    "assets/TexturePool.xml"
-    "assets/xml"
+    "assets/config.yml"
+    "assets/ntsc_1-0"
+    "gamecontrollerdb.txt"
 )
 
 for item in "${REQUIRED_BUNDLE_ITEMS[@]}"; do
@@ -49,12 +49,12 @@ for item in "${REQUIRED_BUNDLE_ITEMS[@]}"; do
     fi
 done
 
-if ! find "$PUBLIC_APP/assets/xml" -type f -print -quit | grep -q .; then
-    echo "Refusing to package an incomplete app bundle: assets/xml is empty" >&2
+if ! find "$PUBLIC_APP/assets/ntsc_1-0" -type f -name '*.yml' -print -quit | grep -q .; then
+    echo "Refusing to package an incomplete app bundle: extraction definitions are empty" >&2
     exit 1
 fi
 
-if strings "$PUBLIC_APP/Ship of Harkinian" | grep -q "/Users/"; then
+if strings "$PUBLIC_APP/Ship of Harkinian" | LC_ALL=C grep -F "/Users/" >/dev/null; then
     echo "Refusing to package an executable containing a local user path." >&2
     exit 1
 fi

@@ -52,7 +52,6 @@ const float maxImGuiScale = 1.0f;
 const float minImGuiScale = 0.65f;
 const float maxImGuiScale = 2.5f;
 #endif
-const float imguiScaleOptionToValue[4] = { 0.75f, 1.0f, 1.5f, 2.0f };
 
 class OTRGlobals {
   public:

@@ -11,6 +11,7 @@ extern "C" {
 #include "z64.h"
 #include "macros.h"
 #include "variables.h"
+#include "functions.h"
 }
 
 static constexpr int32_t CVAR_RESET_BTN_MASK_DEFAULT = BTN_CUSTOM_MODIFIER2;
