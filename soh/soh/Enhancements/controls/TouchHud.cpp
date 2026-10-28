@@ -1,5 +1,5 @@
 #include "TouchHud.h"
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || (defined(__IOS__) && !defined(__TVOS__))
 #include "TouchHudGeometry.h"
 #include "TouchHudBindings.h"
 #include "soh/ShipInit.hpp"
@@ -9,7 +9,9 @@
 #include <libultraship/bridge/consolevariablebridge.h>
 #include <ship/window/Window.h>
 #include <ship/window/gui/Gui.h>
+#ifdef __ANDROID__
 #include <jni.h>
+#endif
 #include <atomic>
 #include <array>
 #include <mutex>
@@ -55,12 +57,12 @@ void Init() {
 }
 RegisterShipInitFunc init(Init);
 }
-extern "C" JNIEXPORT jint JNICALL Java_com_dishii_soh_MainActivity_integratedTouchState(JNIEnv*, jobject) { return state; }
-extern "C" JNIEXPORT jintArray JNICALL Java_com_dishii_soh_MainActivity_integratedTouchBindings(JNIEnv* env, jobject, jint style) {
+extern "C" int TouchHud_GetState() { return state; }
+extern "C" int TouchHud_GetBindings(int style, int32_t* bindings, int count) {
+    if (!bindings || count != TouchHud::BindingCount) return 0;
     style = std::clamp<int>(style, 0, 3);
     const auto context = Ship::Context::GetRawInstance();
     const bool settingsReady = context && context->GetConsoleVariables();
-    std::array<jint, TouchHud::BindingCount> bindings;
     for (int i=0; i<TouchHud::BindingCount; ++i) {
         int action = settingsReady ? CVarGetInteger(TouchHud::BindingCvar(style, i), TouchHud::DefaultAction(style, i))
                                    : TouchHud::DefaultAction(style, i);
@@ -70,32 +72,56 @@ extern "C" JNIEXPORT jintArray JNICALL Java_com_dishii_soh_MainActivity_integrat
         int index = TouchHud::JumpIndex(style, CVarGetInteger(TouchHud::JumpCvar(style), 0));
         if (index >= 0) bindings[index] = TouchHud::ManualJump;
     }
-    auto result = env->NewIntArray(bindings.size());
-    if (result) env->SetIntArrayRegion(result, 0, bindings.size(), bindings.data());
-    return result;
+    return TouchHud::BindingCount;
 }
-extern "C" JNIEXPORT void JNICALL Java_com_dishii_soh_MainActivity_integratedTouchButton(JNIEnv*, jobject, jint mask, jboolean down) {
+extern "C" void TouchHud_SetButton(uint32_t mask, int down) {
     // A semantic map action must not send N64 L: that may also answer Navi.
     if (mask == 0x10000) { if (down) pendingMap = true; return; }
     if (mask == 0x20000) { if (down) pendingNavi = true; return; }
     if (down) { held.fetch_or(mask); pending.fetch_or(mask); }
     else held.fetch_and(~static_cast<uint32_t>(mask));
 }
-extern "C" JNIEXPORT void JNICALL Java_com_dishii_soh_MainActivity_integratedTouchStick(JNIEnv*, jobject, jint x, jint y) {
+extern "C" void TouchHud_SetStick(int x, int y) {
     stickX = std::clamp(x, -85, 85); stickY = std::clamp(y, -85, 85);
 }
-extern "C" JNIEXPORT void JNICALL Java_com_dishii_soh_MainActivity_integratedTouchReset(JNIEnv*, jobject) { Reset(); active = false; }
-extern "C" JNIEXPORT void JNICALL Java_com_dishii_soh_MainActivity_integratedTouchLayout(JNIEnv* env, jobject, jfloatArray values, jboolean visible, jboolean useNaviIcon) {
+extern "C" void TouchHud_Reset() { Reset(); active = false; }
+extern "C" void TouchHud_SetLayout(const float* values, int count, int visible, int useNaviIcon) {
     if (!visible) { active = false; return; }
-    if (values == nullptr || env->GetArrayLength(values) != 30) { active = false; return; }
-    std::array<float, 30> data;
-    env->GetFloatArrayRegion(values, 0, data.size(), data.data());
-    if (env->ExceptionCheck()) { active = false; return; }
+    if (values == nullptr || count != 30) { active = false; return; }
     std::lock_guard lock(layoutMutex);
-    for (int i = 0; i < 10; ++i) anchors[i] = {data[i*3], data[i*3+1], data[i*3+2]};
+    for (int i = 0; i < 10; ++i) anchors[i] = {values[i*3], values[i*3+1], values[i*3+2]};
     naviUtilityIcon = useNaviIcon;
     active = true;
 }
+#ifdef __ANDROID__
+extern "C" JNIEXPORT jint JNICALL Java_com_dishii_soh_MainActivity_integratedTouchState(JNIEnv*, jobject) {
+    return TouchHud_GetState();
+}
+extern "C" JNIEXPORT jintArray JNICALL Java_com_dishii_soh_MainActivity_integratedTouchBindings(JNIEnv* env, jobject, jint style) {
+    std::array<int32_t, TouchHud::BindingCount> bindings;
+    TouchHud_GetBindings(style, bindings.data(), bindings.size());
+    const auto result = env->NewIntArray(bindings.size());
+    if (result) env->SetIntArrayRegion(result, 0, bindings.size(), bindings.data());
+    return result;
+}
+extern "C" JNIEXPORT void JNICALL Java_com_dishii_soh_MainActivity_integratedTouchButton(JNIEnv*, jobject, jint mask, jboolean down) {
+    TouchHud_SetButton(static_cast<uint32_t>(mask), down);
+}
+extern "C" JNIEXPORT void JNICALL Java_com_dishii_soh_MainActivity_integratedTouchStick(JNIEnv*, jobject, jint x, jint y) {
+    TouchHud_SetStick(x, y);
+}
+extern "C" JNIEXPORT void JNICALL Java_com_dishii_soh_MainActivity_integratedTouchReset(JNIEnv*, jobject) { TouchHud_Reset(); }
+extern "C" JNIEXPORT void JNICALL Java_com_dishii_soh_MainActivity_integratedTouchLayout(JNIEnv* env, jobject, jfloatArray values, jboolean visible, jboolean useNaviIcon) {
+    if (!visible || !values || env->GetArrayLength(values) != 30) {
+        TouchHud_SetLayout(nullptr, 0, false, false);
+        return;
+    }
+    std::array<float, 30> data;
+    env->GetFloatArrayRegion(values, 0, data.size(), data.data());
+    if (env->ExceptionCheck()) { TouchHud_SetLayout(nullptr, 0, false, false); return; }
+    TouchHud_SetLayout(data.data(), data.size(), visible, useNaviIcon);
+}
+#endif
 extern "C" int TouchHud_NaviUtilityIcon() { return TouchHud_IsActive() && naviUtilityIcon; }
 extern "C" int TouchHud_IsActive() { return active && !(state.load() & 1); }
 extern "C" void TouchHud_MarkContent(int slot) {
@@ -127,6 +153,12 @@ extern "C" void TouchHud_Stick(int8_t* x, int8_t* y) {
     if (stickX != 0 || stickY != 0) { *x = stickX; *y = stickY; }
 }
 #else
+extern "C" int TouchHud_GetState() { return 0; }
+extern "C" int TouchHud_GetBindings(int, int32_t*, int) { return 0; }
+extern "C" void TouchHud_SetButton(uint32_t, int) { }
+extern "C" void TouchHud_SetStick(int, int) { }
+extern "C" void TouchHud_Reset() { }
+extern "C" void TouchHud_SetLayout(const float*, int, int, int) { }
 extern "C" int TouchHud_IsActive() { return 0; }
 extern "C" void TouchHud_MarkContent(int) { }
 extern "C" int TouchHud_MapPressed() { return 0; }
