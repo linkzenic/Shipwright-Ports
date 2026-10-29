@@ -10,6 +10,8 @@ The repository was renamed from `Shipwright-Android` to `Shipwright-Ports`. Exis
 
 Download published builds from [Releases](https://github.com/linkzenic/Shipwright-Ports/releases). Read the notes for the release you install; the latest published release may not yet include every platform.
 
+**The unified Android, iOS, and tvOS release is available:** [9.3.1 Ports Release](https://github.com/linkzenic/Shipwright-Ports/releases/tag/v9.3.1-ports.1). GitHub Actions artifacts are build candidates, not published releases.
+
 No game ROMs or extracted game assets are included. You must supply a supported, legally obtained Ocarina of Time ROM. Check compatibility with [the ROM checker](https://ship.equipment/) or [supported hashes](docs/supportedHashes.json).
 
 ## Android
@@ -82,3 +84,5 @@ Ship of Harkinian is developed by **Harbour Masters and its contributors**, buil
 - [Official website](https://www.shipofharkinian.com/)
 - [Credits](docs/CREDITS.md)
 - [Building instructions](docs/BUILDING.md)
+
+The unified platform integration is currently on the [apple-platform-parity branch](https://github.com/linkzenic/Shipwright-Ports/tree/apple-platform-parity). The default branch will be brought forward as part of release integration.
