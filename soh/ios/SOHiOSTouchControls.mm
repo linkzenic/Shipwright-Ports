@@ -620,8 +620,20 @@ typedef NS_ENUM(NSInteger, SOHAndroidButtonShape) {
                                   action:@selector(toggleControlsVisibility)
                         forControlEvents:UIControlEventTouchUpInside];
         [self addSubview:self.visibilityButton];
+        [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(applicationSuspending:)
+            name:UIApplicationWillResignActiveNotification object:nil];
+        [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(applicationSuspending:)
+            name:UISceneWillDeactivateNotification object:nil];
     }
     return self;
+}
+
+- (void)applicationSuspending:(NSNotification*)notification {
+    [self cancelAllInputs];
+}
+
+- (void)dealloc {
+    [NSNotificationCenter.defaultCenter removeObserver:self];
 }
 
 - (void)setSOHFaceButtonLayout:(NSInteger)layout {

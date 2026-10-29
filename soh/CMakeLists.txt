@@ -286,6 +286,7 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     )
 elseif(CMAKE_SYSTEM_NAME MATCHES "iOS|tvOS")
     set(SOH_APPLE_TARGET "ios" CACHE STRING "Apple mobile target: ios or tvos")
+    set(SOH_IOS_DISPLAY_NAME "Ship of Harkinian" CACHE STRING "Apple app display name")
     set(SOH_ICLOUD_CONTAINER_ID "iCloud.com.shipofharkinian.shared" CACHE STRING
         "Shared CloudKit container for iPhone, iPad, tvOS, and macOS")
     option(SOH_ENABLE_ICLOUD "Enable iCloud entitlements for Apple builds" ON)

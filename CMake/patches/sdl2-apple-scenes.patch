@@ -1,0 +1,143 @@
+diff --git a/src/video/uikit/SDL_uikitappdelegate.h b/src/video/uikit/SDL_uikitappdelegate.h
+index df3ff0fb9..62ad3aa40 100644
+--- a/src/video/uikit/SDL_uikitappdelegate.h
++++ b/src/video/uikit/SDL_uikitappdelegate.h
+@@ -35,6 +35,7 @@
+ + (NSString *)getAppDelegateClassName;
+ 
+ - (void)hideLaunchScreen;
++- (void)connectWindowScene:(UIWindowScene *)scene API_AVAILABLE(ios(13.0), tvos(13.0));
+ 
+ /* This property is marked as optional, and is only intended to be used when
+  * the app's UI is storyboard-based. SDL is not storyboard-based, however
+@@ -44,4 +45,9 @@
+ 
+ @end
+ 
++/* Linkzenic SDL2 compatibility: single-scene startup for current Apple SDKs. */
++@interface SDLUIKitSceneDelegate : NSObject<UIWindowSceneDelegate>
++@property (nonatomic, strong) UIWindow *window;
++@end
++
+ /* vi: set ts=4 sw=4 expandtab: */
+diff --git a/src/video/uikit/SDL_uikitappdelegate.m b/src/video/uikit/SDL_uikitappdelegate.m
+index 31b114a93..4ec673018 100644
+--- a/src/video/uikit/SDL_uikitappdelegate.m
++++ b/src/video/uikit/SDL_uikitappdelegate.m
+@@ -351,6 +351,8 @@ - (NSUInteger)supportedInterfaceOrientations
+ 
+ @implementation SDLUIKitDelegate {
+     UIWindow *launchWindow;
++    UIWindowScene *mainScene;
++    BOOL mainStarted;
+ }
+ 
+ /* convenience method */
+@@ -390,6 +392,15 @@ - (void)hideLaunchScreen
+ 
+ - (void)postFinishLaunch
+ {
++    /* Linkzenic compatibility: UIKit must connect the scene before SDL creates
++     * its window. Both launch callbacks may schedule this, but main runs once. */
++    if ([[NSBundle mainBundle] objectForInfoDictionaryKey:@"UIApplicationSceneManifest"] && !mainScene) {
++        return;
++    }
++    if (mainStarted) {
++        return;
++    }
++    mainStarted = YES;
+     /* Hide the launch screen the next time the run loop is run. SDL apps will
+      * have a chance to load resources while the launch screen is still up. */
+     [self performSelector:@selector(hideLaunchScreen) withObject:nil afterDelay:0.0];
+@@ -490,6 +501,24 @@ - (UIWindow *)window
+     return nil;
+ }
+ 
++- (UISceneConfiguration *)application:(UIApplication *)application
++    configurationForConnectingSceneSession:(UISceneSession *)session
++    options:(UISceneConnectionOptions *)options API_AVAILABLE(ios(13.0), tvos(13.0))
++{
++    UISceneConfiguration *configuration = [[UISceneConfiguration alloc] initWithName:@"SDL Game" sessionRole:session.role];
++    configuration.delegateClass = SDLUIKitSceneDelegate.class;
++    return configuration;
++}
++
++- (void)connectWindowScene:(UIWindowScene *)scene API_AVAILABLE(ios(13.0), tvos(13.0))
++{
++    mainScene = scene;
++    if (launchWindow) {
++        launchWindow.windowScene = scene;
++    }
++    [self performSelector:@selector(postFinishLaunch) withObject:nil afterDelay:0.0];
++}
++
+ - (void)setWindow:(UIWindow *)window
+ {
+     /* Do nothing. */
+@@ -527,6 +556,21 @@ - (BOOL)application:(UIApplication *)application openURL:(NSURL *)url sourceAppl
+ 
+ @end
+ 
++@implementation SDLUIKitSceneDelegate
++- (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)options
++{
++    if ([scene isKindOfClass:UIWindowScene.class] && [session.role isEqualToString:UIWindowSceneSessionRoleApplication]) {
++        [[SDLUIKitDelegate sharedAppDelegate] connectWindowScene:(UIWindowScene *)scene];
++    }
++}
++- (void)scene:(UIScene *)scene openURLContexts:(NSSet<UIOpenURLContext *> *)contexts
++{
++    for (UIOpenURLContext *context in contexts) {
++        [[SDLUIKitDelegate sharedAppDelegate] sendDropFileForURL:context.URL];
++    }
++}
++@end
++
+ #endif /* SDL_VIDEO_DRIVER_UIKIT */
+ 
+ /* vi: set ts=4 sw=4 expandtab: */
+diff --git a/src/video/uikit/SDL_uikitevents.m b/src/video/uikit/SDL_uikitevents.m
+index 0a96c6821..fcb096a49 100644
+--- a/src/video/uikit/SDL_uikitevents.m
++++ b/src/video/uikit/SDL_uikitevents.m
+@@ -53,10 +53,13 @@ - (void)eventPumpChanged
+     NSNotificationCenter *notificationCenter = NSNotificationCenter.defaultCenter;
+     if (UIKit_EventPumpEnabled && !self.isObservingNotifications) {
+         self.isObservingNotifications = YES;
+-        [notificationCenter addObserver:self selector:@selector(applicationDidBecomeActive) name:UIApplicationDidBecomeActiveNotification object:nil];
+-        [notificationCenter addObserver:self selector:@selector(applicationWillResignActive) name:UIApplicationWillResignActiveNotification object:nil];
+-        [notificationCenter addObserver:self selector:@selector(applicationDidEnterBackground) name:UIApplicationDidEnterBackgroundNotification object:nil];
+-        [notificationCenter addObserver:self selector:@selector(applicationWillEnterForeground) name:UIApplicationWillEnterForegroundNotification object:nil];
++        /* Linkzenic compatibility: this port has one application scene. Keep
++         * SDL's lifecycle/audio/input handling attached to that scene's events. */
++        BOOL scenes = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"UIApplicationSceneManifest"] != nil;
++        [notificationCenter addObserver:self selector:@selector(applicationDidBecomeActive) name:scenes ? UISceneDidActivateNotification : UIApplicationDidBecomeActiveNotification object:nil];
++        [notificationCenter addObserver:self selector:@selector(applicationWillResignActive) name:scenes ? UISceneWillDeactivateNotification : UIApplicationWillResignActiveNotification object:nil];
++        [notificationCenter addObserver:self selector:@selector(applicationDidEnterBackground) name:scenes ? UISceneDidEnterBackgroundNotification : UIApplicationDidEnterBackgroundNotification object:nil];
++        [notificationCenter addObserver:self selector:@selector(applicationWillEnterForeground) name:scenes ? UISceneWillEnterForegroundNotification : UIApplicationWillEnterForegroundNotification object:nil];
+         [notificationCenter addObserver:self selector:@selector(applicationWillTerminate) name:UIApplicationWillTerminateNotification object:nil];
+         [notificationCenter addObserver:self selector:@selector(applicationDidReceiveMemoryWarning) name:UIApplicationDidReceiveMemoryWarningNotification object:nil];
+ #if !TARGET_OS_TV
+diff --git a/src/video/uikit/SDL_uikitwindow.m b/src/video/uikit/SDL_uikitwindow.m
+index 0e0ea0577..114bc45fb 100644
+--- a/src/video/uikit/SDL_uikitwindow.m
++++ b/src/video/uikit/SDL_uikitwindow.m
+@@ -208,6 +208,18 @@ int UIKit_CreateWindow(_THIS, SDL_Window *window)
+         /* ignore the size user requested, and make a fullscreen window */
+         /* !!! FIXME: can we have a smaller view? */
+         uiwindow = [[SDL_uikitwindow alloc] initWithFrame:data.uiscreen.bounds];
++        /* Linkzenic compatibility: attach the SDL window to its connected scene.
++         * The legacy initializer remains for older clients and external screens. */
++        for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
++            if ([scene isKindOfClass:UIWindowScene.class] && ((UIWindowScene *)scene).screen == data.uiscreen) {
++                uiwindow.windowScene = (UIWindowScene *)scene;
++                uiwindow.frame = ((UIWindowScene *)scene).coordinateSpace.bounds;
++                if ([scene.delegate respondsToSelector:@selector(setWindow:)]) {
++                    [(id<UIWindowSceneDelegate>)scene.delegate setWindow:uiwindow];
++                }
++                break;
++            }
++        }
+ 
+         /* put the window on an external display if appropriate. */
+         if (data.uiscreen != [UIScreen mainScreen]) {

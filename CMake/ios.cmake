@@ -1,5 +1,18 @@
 include(FetchContent)
 
+# Declare SDL before libultraship so both Apple compatibility patches are part
+# of a clean dependency fetch, not just changes in a developer's build tree.
+FetchContent_Declare(SDL2
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+    GIT_TAG release-2.32.10
+    PATCH_COMMAND ${CMAKE_COMMAND}
+        -Dpatch_file=${CMAKE_SOURCE_DIR}/libultraship/cmake/dependencies/patches/sdl2-ios-controller-menu-press.patch
+        -P ${CMAKE_SOURCE_DIR}/libultraship/cmake/dependencies/git-patch.cmake
+    COMMAND ${CMAKE_COMMAND}
+        -Dpatch_file=${CMAKE_CURRENT_LIST_DIR}/patches/sdl2-apple-scenes.patch
+        -P ${CMAKE_SOURCE_DIR}/libultraship/cmake/dependencies/git-patch.cmake
+    OVERRIDE_FIND_PACKAGE)
+
 # Public Apple builds must not embed the local checkout path in diagnostics,
 # debug metadata, or __FILE__ strings.
 add_compile_options(

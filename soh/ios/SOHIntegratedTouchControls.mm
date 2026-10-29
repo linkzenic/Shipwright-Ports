@@ -83,6 +83,10 @@ UIFont* TouchFont(CGFloat size) {
             name:UIApplicationWillResignActiveNotification object:nil];
         [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(resume:)
             name:UIApplicationDidBecomeActiveNotification object:nil];
+        [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(suspend:)
+            name:UISceneWillDeactivateNotification object:nil];
+        [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(resume:)
+            name:UISceneDidActivateNotification object:nil];
     }
     return self;
 }
