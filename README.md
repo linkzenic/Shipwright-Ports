@@ -1,89 +1,88 @@
-# Ship of Harkinian Android
+# Ship of Harkinian — Android, iOS, and tvOS
 
-Android ports of Ship of Harkinian, based on the HarbourMasters project.
+Linkzenic's Android, iOS, and Apple TV ports of [Harbour Masters' Ship of Harkinian](https://github.com/HarbourMasters/Shipwright), together in one repository.
 
-Original repository: https://github.com/HarbourMasters/Shipwright
+**This repository now focuses on standard Ship of Harkinian.** NEI, Cel Shading, and Fusion are not included in the unified release.
 
-Current Android release: **v9.2.3-android.13**
+The repository was renamed from `Shipwright-Android` to `Shipwright-Ports`. Existing GitHub links redirect here.
 
-## Which port should I use?
+## Downloads and release status
 
-**For most people, regular Ship of Harkinian is the recommended choice.** It
-most closely follows the standard Harbour Masters experience. Choose one of the
-other ports only when you specifically want that fork's changes.
+Download published builds from [Releases](https://github.com/linkzenic/Shipwright-Ports/releases). Read the notes for the release you install; the latest published release may not yet include every platform.
 
-| Port | What it is for | Recommendation |
-| --- | --- | --- |
-| **Ship of Harkinian** | The regular Android port, closest to upstream | **Recommended for most players** |
-| **Fusion Fork** | The combined experimental fork | Use when you specifically want the Fusion feature set |
-| **SOHCS** | Roborich's cel-shaded fork | Use when you specifically want the cel-shaded presentation |
-| **SOHNEI** | Skijer's Not Enough Items fork | Use when you specifically want the added NEI content |
+**The new unified Android, iOS, and tvOS release is currently being prepared.** GitHub Actions artifacts are build candidates, not published releases.
 
-The ports use separate app IDs and can be installed together.
+No game ROMs or extracted game assets are included. You must supply a supported, legally obtained Ocarina of Time ROM. Check compatibility with [the ROM checker](https://ship.equipment/) or [supported hashes](docs/supportedHashes.json).
 
-Supported: Android 7+ with OpenGL ES 3.0+
+## Android
 
-Tested on: Android 15
+- Customizable Classic, N64, GameCube, and Modern touch layouts.
+- A layout editor with movable, resizable, and individually hideable controls.
+- Independent touch assignments, manual-jump options, extra item buttons, modifier assignments, and floating-stick controls.
+- Item icons, contextual actions, Fairy, and Map controls integrated into the touch layouts.
 
-Official website: https://www.shipofharkinian.com/
+### Installation and updates
 
-Official Discord: https://discord.com/invite/shipofharkinian
+1. Download the standard Android APK from Releases.
+2. Install it over your existing Linkzenic standard SOH app to retain its app data. Do not uninstall first.
+3. On first setup, choose the user-data folder and allow the app to prepare its support files.
+4. Select your supported ROM when prompted to extract game data.
 
-## Project Attribution
+Android requires Android 7 or later and compatible OpenGL ES 3.0 hardware. Standard SOH uses the selected `SOH` user-data folder; check Settings > General for the active location.
 
-[Ship of Harkinian](https://github.com/HarbourMasters/Shipwright) is developed by Harbour Masters and its contributors.
+Use the Android back gesture/button or the mapped controller menu button to open settings. Physical-controller mappings are under Settings > Controls; touch options are under Settings > Touch Controls.
 
-## Installation
+## iOS
 
-1. Verify that you have a supported, legally obtained Ocarina of Time ROM. You can use the compatibility checker at https://ship.equipment/ or compare your ROM's `sha1` hash against [docs/supportedHashes.json](docs/supportedHashes.json).
-2. Install regular SOH (recommended), Fusion, SOHCS, or SOHNEI from the releases page: https://github.com/linkzenic/Shipwright-Android/releases
-3. Open the app once so it can create the data folder and copy bundled support files.
-4. When prompted, allow setup and select your ROM so the app can generate the required `.otr` or `.o2r` game data.
-5. If you have a Master Quest ROM, choose to extract another ROM when prompted. Otherwise, continue into the game.
-6. Subsequent launches should start directly into the game.
+- Customizable Classic, N64, GameCube, and Modern touch layouts.
+- A layout editor with movable, resizable, and individually hideable controls.
+- Independent touch assignments, manual-jump options, extra item buttons, modifier assignments, and floating-stick controls.
+- Item icons, contextual actions, Fairy, and Map controls integrated into the touch layouts.
+- Automatic SOH user-folder syncing to iCloud Drive on properly provisioned builds, including saves, mods, and settings.
+- CloudKit save syncing with tvOS, with conflicting saves preserved for review.
 
-Use the Back, Select, or minus controller button, or the Android back gesture/button, to open the Ship of Harkinian menu. Use touch controls or a controller to navigate menus.
+### Installation and files
 
-## Data Folder
+Apple downloads are unsigned IPAs unless a release explicitly says otherwise. Sign and install them using a compatible signing method. Keep the same app identifier and signing setup when updating; do not delete the existing app if you want to retain its local data.
 
-Standard SOH stores user data in the selected `SOH` data folder. SOHCS uses a separate `SOHCS` data folder so both editions can coexist with independent saves and settings. You can view the current folder and change it from Settings > General.
+Use the app's file-import options to add compatible game data generated from your own supported ROM. Local files remain available offline. On correctly provisioned builds, the app automatically creates the visible **SOH** folder in iCloud Drive. A folder-picker fallback is available when native iCloud Documents access is unavailable.
 
-When SOHCS detects an existing `SOH` folder on first launch, it asks whether to copy compatible archives, saves, settings, and controller configuration. Choose **No** to keep the two editions completely independent. Importing never moves or deletes the original `SOH` files.
+Sync checks run while the app is active and at launch/foreground. External settings and resource changes apply after restarting. Deletions do not automatically propagate. Runtime logs, caches, temporary files, and sync bookkeeping are excluded.
 
-Mods and user files should be placed in the relevant folders inside the selected edition's data folder. Mods use `.otr` or `.o2r` files and can be enabled from Settings > Mod Menu.
+## tvOS — Apple TV
 
-## FAQ
+- CloudKit save syncing with iOS on correctly provisioned builds.
+- LAN uploads for saves, mods, and game data.
+- LAN save downloads and validated JSON uploads.
+- Uploaded JSON settings apply after restarting, with previous settings retained.
 
-**Why is it immediately crashing?**
+Install the tvOS IPA using a compatible signing method. Start file transfer in the app and open its displayed LAN address on a phone or computer on the same trusted network.
 
-Try deleting and regenerating your extracted `.otr` or `.o2r` game data from your own ROM.
+Choose the appropriate upload category. JSON uploads must contain a valid JSON object, use a simple `.json` filename, and be no larger than 8 MB. Fully close and reopen the app to apply uploaded JSON settings. Save conflicts are reviewed in the app rather than silently overwriting active progress.
 
-**The game opened once but now shows a black screen.**
+tvOS does not expose an iCloud Drive user folder. It uses CloudKit for saves and LAN transfers for other files. Apple TV storage can be purged by the system, so retain save backups through CloudKit or LAN downloads.
 
-Try deleting `imgui.ini` from your `SOH` folder. If it still happens, set MSAA to 1 in Settings > Graphics.
+## Apple signing and iCloud
 
-**My controller is not doing anything.**
+**Generic unsigned IPAs have CloudKit disabled.** Re-signing an IPA with an ordinary personal profile does not grant access to another developer team's iCloud containers.
 
-Open the menu and check Settings > Controls to confirm the controller is detected and mapped. If this happens immediately after first setup, close and reopen the app once.
+To enable cloud support with your own Apple developer account, build with containers owned by your team and provision both app identifiers correctly. iOS and tvOS must use the same CloudKit container and environment, and the devices must be signed into the same iCloud account. Enable **Sync Saves with iCloud** in both apps. iOS iCloud Drive mirroring uses a separate Documents container.
 
-**Can I hide the on-screen touch controls?**
+See the [cloud signing and setup guide](https://github.com/linkzenic/Shipwright-Ports/blob/apple-platform-parity/docs/APPLE_CLOUD_SIGNING.md).
 
-Yes. Use Settings > Touch Controls > Disable Touch Controls.
+## Mods and support
 
-**Can I resize the menu?**
+Place compatible `.otr` or `.o2r` packs in the `mods` directory inside the active SOH user folder. On Apple TV, use the LAN upload page. Follow each pack's compatibility and activation instructions.
 
-Yes. Use Settings > General > Menu Scale.
+Report port-specific problems in [this repository's Issues](https://github.com/linkzenic/Shipwright-Ports/issues). Include your device, OS version, exact app version, reproduction steps, and whether mods are enabled. Remove personal information from logs before sharing them. Never upload ROMs or extracted game archives.
 
-**How do I add mods?**
+## Credits and development
 
-Place mod `.otr` or `.o2r` files in the `mods` folder inside the selected edition's data folder, then enable them from Settings > Mod Menu.
+Ship of Harkinian is developed by **Harbour Masters and its contributors**, building on the Ocarina of Time decompilation project and libultraship. Linkzenic maintains the platform adaptations in this repository.
 
-##  **Cel-Shaded Fork**
+- [Upstream source](https://github.com/HarbourMasters/Shipwright)
+- [Official website](https://www.shipofharkinian.com/)
+- [Credits](docs/CREDITS.md)
+- [Building instructions](docs/BUILDING.md)
 
-The cel-shaded edition, based on [Roborich's 9.2.3-celshade0.5 fork](https://github.com/roborich/Shipwright/releases/tag/9.2.3-celshade0.5). It uses the /SOHCS data folder.
-On first launch, SOHCS asks whether to import existing saves, settings, controller configuration, and compatible archives from /SOH. Choose No to keep both installations completely independent. The original /SOH files are never moved or deleted.
-
-##  **Skijer's Not Enough Items Fork**
-
-This is a beta fork, based on [Skijer's Not Enough Items fork](https://github.com/skijer/Shipwright/releases/tag/Alpha_3). It uses the /SOHNEI data folder.
-On first launch, SOHNEI offers to import existing SOH data from /SOH and mm.o2r from /2S2H. It will also import relevant 3DS textures from 2S2H of available. The original files are never moved or deleted.
+The unified platform integration is currently on the [apple-platform-parity branch](https://github.com/linkzenic/Shipwright-Ports/tree/apple-platform-parity). The default branch will be brought forward as part of release integration.
