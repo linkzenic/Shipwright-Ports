@@ -261,6 +261,9 @@ typedef NS_ENUM(NSInteger, SOHAndroidButtonShape) {
 @property(nonatomic) CGFloat stickDiameter;
 @property(nonatomic) int controllerAxisX;
 @property(nonatomic) int controllerAxisY;
+@property(nonatomic) BOOL floating;
+@property(nonatomic) BOOL transparent;
+@property(nonatomic) BOOL trackingTouch;
 - (void)cancelInput;
 
 @end
@@ -275,6 +278,7 @@ typedef NS_ENUM(NSInteger, SOHAndroidButtonShape) {
         self.accessibilityLabel = @"Floating left joystick";
         self.controllerAxisX = kAxisLeftX;
         self.controllerAxisY = kAxisLeftY;
+        self.floating = YES;
 
         self.base = [[UIView alloc] initWithFrame:CGRectZero];
         self.base.userInteractionEnabled = NO;
@@ -303,6 +307,14 @@ typedef NS_ENUM(NSInteger, SOHAndroidButtonShape) {
     self.knob.bounds = CGRectMake(0.0, 0.0, knobSize, knobSize);
     self.knob.layer.cornerRadius = knobSize * 0.5;
     self.knob.center = CGPointMake(diameter * 0.5, diameter * 0.5);
+    self.base.backgroundColor = self.transparent || self.floating ? UIColor.clearColor : [UIColor colorWithWhite:0 alpha:.188];
+    self.base.layer.borderWidth = self.transparent || self.floating ? 0 : 2;
+    self.base.hidden = self.floating && !self.trackingTouch;
+    self.base.center = self.stickCenter;
+}
+
+- (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent*)event {
+    return self.floating ? [super pointInside:point withEvent:event] : CGRectContainsPoint(self.base.frame,point);
 }
 
 - (void)updateForPoint:(CGPoint)point {
@@ -327,7 +339,8 @@ typedef NS_ENUM(NSInteger, SOHAndroidButtonShape) {
     UITouch* touch = touches.anyObject;
     if (touch != nil) {
         CGPoint point = [touch locationInView:self];
-        self.stickCenter = point;
+        self.trackingTouch = YES;
+        if(self.floating) self.stickCenter = point;
         self.base.center = self.stickCenter;
         self.base.hidden = NO;
         [self updateForPoint:point];
@@ -354,7 +367,8 @@ typedef NS_ENUM(NSInteger, SOHAndroidButtonShape) {
     SetVirtualAxis(self.controllerAxisY, 0);
     self.knob.center =
         CGPointMake(self.stickDiameter * 0.5, self.stickDiameter * 0.5);
-    self.base.hidden = YES;
+    self.trackingTouch = NO;
+    self.base.hidden = self.floating;
 }
 
 @end
@@ -700,6 +714,11 @@ typedef NS_ENUM(NSInteger, SOHAndroidButtonShape) {
     CGFloat rightStickStart = width * 0.52;
     self.rightStick.frame =
         CGRectMake(rightStickStart, 0.0, width - rightStickStart, height);
+    if(!self.leftStick.trackingTouch && !self.leftStick.floating)
+        self.leftStick.stickCenter=CGPointMake(left+stickSize*.5,height-bottom-stickSize*.5);
+    if(!self.rightStick.trackingTouch && !self.rightStick.floating)
+        self.rightStick.stickCenter=CGPointMake(width*.60-rightStickStart,height-bottom-rightStickSize*.5);
+    [self.leftStick setNeedsLayout];[self.rightStick setNeedsLayout];
 
     CGFloat crossSize = 90.0 * scale;
     self.cCross.frame =
@@ -787,6 +806,7 @@ typedef NS_ENUM(NSInteger, SOHAndroidButtonShape) {
 static SOHAndroidTouchOverlay* sTouchOverlay;
 static BOOL sTouchControlsDesired;
 static NSInteger sTouchFaceButtonLayout;
+static BOOL sLeftFloating=YES,sRightFloating=YES,sTransparentSticks=NO;
 static std::atomic_bool sTouchControlsMenuVisible(false);
 
 static UIWindow* ActiveWindow() {
@@ -813,6 +833,12 @@ static void ApplyTouchControlsState() {
         return;
     }
 
+    if(SOHiOS_IntegratedTouchStyle()>0) {
+        [sTouchOverlay cancelAllInputs];[sTouchOverlay removeFromSuperview];sTouchOverlay=nil;
+        SOHiOS_ApplyIntegratedTouch((__bridge void*)window,sTouchControlsDesired,sTouchControlsMenuVisible.load());
+        return;
+    }
+    SOHiOS_ApplyIntegratedTouch((__bridge void*)window,NO,NO);
     if (!sTouchControlsDesired) {
         [sTouchOverlay cancelAllInputs];
         [sTouchOverlay removeFromSuperview];
@@ -826,6 +852,9 @@ static void ApplyTouchControlsState() {
             UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     }
     [sTouchOverlay setSOHFaceButtonLayout:sTouchFaceButtonLayout];
+    sTouchOverlay.leftStick.floating=sLeftFloating;sTouchOverlay.rightStick.floating=sRightFloating;
+    sTouchOverlay.leftStick.transparent=sTransparentSticks;sTouchOverlay.rightStick.transparent=sTransparentSticks;
+    [sTouchOverlay setNeedsLayout];
     if (sTouchOverlay.superview != window) {
         [sTouchOverlay removeFromSuperview];
         sTouchOverlay.frame = window.bounds;
@@ -855,7 +884,7 @@ void SOHiOS_SetFaceButtonLayout(int layout) {
 
 void SOHiOS_SetTouchControlsMenuVisible(int visible) {
     bool menuVisible = visible != 0;
-    sTouchControlsMenuVisible.store(menuVisible);
+    if(sTouchControlsMenuVisible.exchange(menuVisible)==menuVisible)return;
     dispatch_async(dispatch_get_main_queue(), ^{
         ApplyTouchControlsState();
     });
@@ -863,4 +892,18 @@ void SOHiOS_SetTouchControlsMenuVisible(int visible) {
 
 int SOHiOS_ConsumeMenuToggleRequest(void) {
     return sTouchControlsMenuToggleRequested.exchange(false) ? 1 : 0;
+}
+
+void SOHiOS_RequestMenuToggle(void) { sTouchControlsMenuToggleRequested.store(true); }
+void SOHiOS_RefreshOverlay(void) { ApplyTouchControlsState(); }
+void SOHiOS_SetCameraStick(float x,float y) {
+    if(!std::isfinite(x)||!std::isfinite(y))x=y=0;
+    SetVirtualAxis(kAxisRightX,ClampAxis(std::clamp(x,-1.f,1.f)*SDL_MAX_SINT16));
+    SetVirtualAxis(kAxisRightY,ClampAxis(std::clamp(y,-1.f,1.f)*SDL_MAX_SINT16));
+}
+void SOHiOS_SetTouchStickOptions(int left,int right,int transparent) {
+    dispatch_async(dispatch_get_main_queue(),^{
+        sLeftFloating=left!=0;sRightFloating=right!=0;sTransparentSticks=transparent!=0;
+        [sTouchOverlay cancelAllInputs];ApplyTouchControlsState();
+    });
 }

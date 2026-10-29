@@ -27,5 +27,10 @@ void BootCommands_Init() {
     CVarRegisterInteger(CVAR_SETTING("TouchControls.FaceButtonLayout"), 0);
     SOHiOS_SetTouchControlsEnabled(!CVarGetInteger(CVAR_SETTING("TouchControls.Disabled"), 0));
     SOHiOS_SetFaceButtonLayout(CVarGetInteger(CVAR_SETTING("TouchControls.FaceButtonLayout"), 0));
+    SOHiOS_ConfigureIntegratedTouch(CVarGetInteger(CVAR_SETTING("TouchControls.Style"),0),
+        CVarGetFloat(CVAR_SETTING("TouchControls.Scale"),1),CVarGetFloat(CVAR_SETTING("TouchControls.Opacity"),.55f),
+        CVarGetInteger(CVAR_SETTING("TouchControls.FloatingLeftStick"),1),
+        CVarGetInteger(CVAR_SETTING("TouchControls.FloatingRightStick"),1),
+        CVarGetInteger(CVAR_SETTING("TouchControls.TransparentSticks"),0));
 #endif
 }

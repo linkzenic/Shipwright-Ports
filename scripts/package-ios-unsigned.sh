@@ -41,6 +41,10 @@ REQUIRED_BUNDLE_ITEMS=(
     "assets/ntsc_1-0"
     "gamecontrollerdb.txt"
 )
+DEVICE_FAMILY=$(/usr/libexec/PlistBuddy -c 'Print :UIDeviceFamily:0' "$PUBLIC_APP/Info.plist" 2>/dev/null || true)
+if [ "$DEVICE_FAMILY" != "3" ]; then
+    REQUIRED_BUNDLE_ITEMS+=("fonts/FiraSansCondensed-Bold.ttf" "fonts/MaterialSymbolsRounded-Regular.ttf")
+fi
 
 for item in "${REQUIRED_BUNDLE_ITEMS[@]}"; do
     if [ ! -e "$PUBLIC_APP/$item" ]; then

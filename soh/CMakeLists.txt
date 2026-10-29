@@ -146,6 +146,7 @@ if(CMAKE_SYSTEM_NAME MATCHES "iOS|tvOS")
         list(APPEND soh__ ${CMAKE_CURRENT_SOURCE_DIR}/ios/SOHTVOSFileServer.mm)
     else()
         list(APPEND soh__ ${CMAKE_CURRENT_SOURCE_DIR}/ios/SOHiOSTouchControls.mm)
+        list(APPEND soh__ ${CMAKE_CURRENT_SOURCE_DIR}/ios/SOHIntegratedTouchControls.mm)
     endif()
 endif()
 
@@ -729,6 +730,12 @@ if(CMAKE_SYSTEM_NAME MATCHES "iOS|tvOS")
             "${CMAKE_CURRENT_SOURCE_DIR}/soh.o2r" "$<TARGET_FILE_DIR:soh>/soh.o2r"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_BINARY_DIR}/gamecontrollerdb.txt" "$<TARGET_FILE_DIR:soh>/gamecontrollerdb.txt")
+    if(NOT SOH_APPLE_TARGET STREQUAL "tvos")
+        target_link_libraries(${PROJECT_NAME} PRIVATE "-framework CoreText")
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different
+                "${CMAKE_SOURCE_DIR}/Android/app/src/main/assets/fonts" "$<TARGET_FILE_DIR:soh>/fonts")
+    endif()
 endif()
 ################################################################################
 # Dependencies

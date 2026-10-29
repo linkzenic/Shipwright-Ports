@@ -10,10 +10,10 @@
 #include <ship/controller/controldeck/ControlDeck.h>
 #include <ship/Context.h>
 #include <algorithm>
+#include "soh/Enhancements/controls/TouchHudBindings.h"
 #ifdef __ANDROID__
 #include <jni.h>
 #include <SDL2/SDL.h>
-#include "soh/Enhancements/controls/TouchHudBindings.h"
 #endif
 #if defined(__IOS__)
 #include "ios/SOHiCloudSync.h"
@@ -85,7 +85,7 @@ static const std::map<int32_t, const char*> touchFaceButtonLayoutMap = {
 };
 #endif
 
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || (defined(__IOS__) && !defined(__TVOS__))
 static const std::map<int32_t, const char*> touchStyleMap = {
     { 0, "Classic" }, { 1, "N64" }, { 2, "GameCube" }, { 3, "Modern" },
 };
@@ -108,7 +108,7 @@ static const std::map<int32_t, const char*> touchNaviLocationMap = {
 };
 static std::array<std::array<int, TouchHud::BindingCount>, 4> touchBindingSnapshot;
 
-static void SetAndroidIntegratedTouch() {
+static void SetMobileIntegratedTouch() {
     if (CVarGetInteger(CVAR_ENHANCEMENT("ManualJump"), 0) && !CVarGetInteger(CVAR_SETTING("DisableChanges"), 0)) {
         for (int style=1; style<=3; ++style) {
             int jumpIndex = TouchHud::JumpIndex(style, CVarGetInteger(TouchHud::JumpCvar(style), 0));
@@ -127,6 +127,7 @@ static void SetAndroidIntegratedTouch() {
     else if (touchBindingSnapshot[2][9] == TouchHud::Navi) naviLocation = 1;
     else if (touchBindingSnapshot[2][3] == TouchHud::Navi) naviLocation = 2;
     CVarSetInteger(CVAR_SETTING("TouchControls.GameCubeNaviLocation"), naviLocation);
+#ifdef __ANDROID__
     auto* env = static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());
     jobject activity = static_cast<jobject>(SDL_AndroidGetActivity());
     if (!env || !activity) return;
@@ -140,9 +141,20 @@ static void SetAndroidIntegratedTouch() {
         static_cast<jboolean>(CVarGetInteger(CVAR_SETTING("TouchControls.FloatingRightStick"), 1) != 0));
     if (env->ExceptionCheck()) env->ExceptionClear();
     env->DeleteLocalRef(type); env->DeleteLocalRef(activity);
+#else
+    SOHiOS_ConfigureIntegratedTouch(CVarGetInteger(CVAR_SETTING("TouchControls.Style"),0),
+        CVarGetFloat(CVAR_SETTING("TouchControls.Scale"),1),CVarGetFloat(CVAR_SETTING("TouchControls.Opacity"),.55f),
+        CVarGetInteger(CVAR_SETTING("TouchControls.FloatingLeftStick"),1),
+        CVarGetInteger(CVAR_SETTING("TouchControls.FloatingRightStick"),1),
+        CVarGetInteger(CVAR_SETTING("TouchControls.TransparentSticks"),0));
+    SOHiOS_SetTouchStickOptions(CVarGetInteger(CVAR_SETTING("TouchControls.FloatingLeftStick"),1),
+        CVarGetInteger(CVAR_SETTING("TouchControls.FloatingRightStick"),1),
+        CVarGetInteger(CVAR_SETTING("TouchControls.TransparentSticks"),0));
+#endif
 }
 
-static void EditAndroidIntegratedTouch() {
+static void EditMobileIntegratedTouch() {
+#ifdef __ANDROID__
     auto* env = static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());
     jobject activity = static_cast<jobject>(SDL_AndroidGetActivity());
     if (!env || !activity) return;
@@ -151,8 +163,12 @@ static void EditAndroidIntegratedTouch() {
     if (method) env->CallVoidMethod(activity, method);
     if (env->ExceptionCheck()) env->ExceptionClear();
     env->DeleteLocalRef(type); env->DeleteLocalRef(activity);
+#else
+    SOHiOS_EditIntegratedTouch();
+#endif
 }
-static void SetAndroidTouchControlsDisabled(bool disabled) {
+static void SetMobileTouchControlsDisabled(bool disabled) {
+#ifdef __ANDROID__
     JNIEnv* env = (JNIEnv*)SDL_AndroidGetJNIEnv();
     jobject activity = (jobject)SDL_AndroidGetActivity();
     if (env == nullptr || activity == nullptr) {
@@ -172,9 +188,13 @@ static void SetAndroidTouchControlsDisabled(bool disabled) {
 
     env->DeleteLocalRef(activityClass);
     env->DeleteLocalRef(activity);
+#else
+    SOHiOS_SetTouchControlsEnabled(!disabled);
+#endif
 }
 
-static void SetAndroidTouchFaceButtonLayout(int32_t layout) {
+static void SetMobileTouchFaceButtonLayout(int32_t layout) {
+#ifdef __ANDROID__
     JNIEnv* env = (JNIEnv*)SDL_AndroidGetJNIEnv();
     jobject activity = (jobject)SDL_AndroidGetActivity();
     if (env == nullptr || activity == nullptr) {
@@ -191,9 +211,13 @@ static void SetAndroidTouchFaceButtonLayout(int32_t layout) {
         env->DeleteLocalRef(activityClass);
     }
     env->DeleteLocalRef(activity);
+#else
+    SOHiOS_SetFaceButtonLayout(layout);
+#endif
 }
 
-static void SetAndroidTouchLeftStickFloating(bool floating) {
+static void SetMobileTouchLeftStickFloating(bool floating) {
+#ifdef __ANDROID__
     JNIEnv* env = (JNIEnv*)SDL_AndroidGetJNIEnv();
     jobject activity = (jobject)SDL_AndroidGetActivity();
     if (env == nullptr || activity == nullptr) {
@@ -209,8 +233,13 @@ static void SetAndroidTouchLeftStickFloating(bool floating) {
         env->DeleteLocalRef(activityClass);
     }
     env->DeleteLocalRef(activity);
+#else
+    SetMobileIntegratedTouch();
+#endif
 }
+#endif
 
+#ifdef __ANDROID__
 static void OpenAndroidDataFolderChooser() {
     JNIEnv* env = (JNIEnv*)SDL_AndroidGetJNIEnv();
     jobject activity = (jobject)SDL_AndroidGetActivity();
@@ -364,21 +393,6 @@ void SohMenu::AddMenuSettings() {
         .RaceDisable(false)
         .Options(CheckboxOptions().Tooltip(
             "Search input box gets autofocus when visible. Does not affect using other widgets."));
-#if defined(__IOS__) && !defined(__TVOS__)
-    AddWidget(path, "Touch Face Buttons", WIDGET_CVAR_COMBOBOX)
-        .CVar(CVAR_SETTING("TouchControls.FaceButtonLayout"))
-        .RaceDisable(false)
-        .Callback([](WidgetInfo&) {
-            SOHiOS_SetFaceButtonLayout(CVarGetInteger(CVAR_SETTING("TouchControls.FaceButtonLayout"), 0));
-        })
-        .Options(ComboboxOptions().ComboMap(touchFaceButtonLayoutMap).DefaultIndex(0));
-    AddWidget(path, "Disable Touch Controls", WIDGET_CVAR_CHECKBOX)
-        .CVar(CVAR_SETTING("TouchControls.Disabled"))
-        .RaceDisable(false)
-        .Callback([](WidgetInfo&) {
-            SOHiOS_SetTouchControlsEnabled(CVarGetInteger(CVAR_SETTING("TouchControls.Disabled"), 0) == 0);
-        });
-#endif
     AddWidget(path, "Reset Button Combination:", WIDGET_CVAR_BTN_SELECTOR)
         .CVar("gSettings.ResetBtn")
         .Options(BtnSelectorOptions().DefaultValue(BTN_CUSTOM_MODIFIER2));
@@ -786,7 +800,7 @@ void SohMenu::AddMenuSettings() {
         .HideInSearch(true)
         .Options(WindowButtonOptions().Tooltip("Enables the separate Bindings Window."));
 
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || (defined(__IOS__) && !defined(__TVOS__))
     // Touch Controls
     path.sidebarName = "Touch Controls";
     path.column = SECTION_COLUMN_1;
@@ -794,28 +808,28 @@ void SohMenu::AddMenuSettings() {
     AddWidget(path, "Touch Controller Style", WIDGET_CVAR_COMBOBOX)
         .CVar(CVAR_SETTING("TouchControls.Style"))
         .RaceDisable(false)
-        .Callback([](WidgetInfo&) { SetAndroidIntegratedTouch(); })
+        .Callback([](WidgetInfo&) { SetMobileIntegratedTouch(); })
         .Options(ComboboxOptions().DefaultIndex(0).ComboMap(touchStyleMap).Tooltip(
             "Classic preserves the existing controls and HUD. Integrated presets place live item icons on the touch buttons."));
     AddWidget(path, "Edit Integrated Touch Layout", WIDGET_BUTTON)
         .PreFunc([](WidgetInfo& info) { info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"), 0) == 0; })
-        .RaceDisable(false).Callback([](WidgetInfo&) { EditAndroidIntegratedTouch(); });
+        .RaceDisable(false).Callback([](WidgetInfo&) { EditMobileIntegratedTouch(); });
     AddWidget(path, "Size", WIDGET_CVAR_SLIDER_FLOAT)
         .CVar(CVAR_SETTING("TouchControls.Scale"))
         .PreFunc([](WidgetInfo& info) { info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"), 0) == 0; })
-        .RaceDisable(false).Callback([](WidgetInfo&) { SetAndroidIntegratedTouch(); })
+        .RaceDisable(false).Callback([](WidgetInfo&) { SetMobileIntegratedTouch(); })
         .Options(FloatSliderOptions().Min(.75f).Max(1.5f).DefaultValue(1).IsPercentage());
     AddWidget(path, "Opacity", WIDGET_CVAR_SLIDER_FLOAT)
         .CVar(CVAR_SETTING("TouchControls.Opacity"))
         .PreFunc([](WidgetInfo& info) { info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"), 0) == 0; })
-        .RaceDisable(false).Callback([](WidgetInfo&) { SetAndroidIntegratedTouch(); })
+        .RaceDisable(false).Callback([](WidgetInfo&) { SetMobileIntegratedTouch(); })
         .Options(FloatSliderOptions().Min(.15f).Max(1).DefaultValue(.55f).IsPercentage());
     AddWidget(path, "Touch Face Buttons", WIDGET_CVAR_COMBOBOX)
         .CVar(CVAR_SETTING("TouchControls.FaceButtonLayout"))
         .PreFunc([](WidgetInfo& info) { info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"), 0) != 0; })
         .RaceDisable(false)
         .Callback([](WidgetInfo& info) {
-            SetAndroidTouchFaceButtonLayout(
+            SetMobileTouchFaceButtonLayout(
                 CVarGetInteger(CVAR_SETTING("TouchControls.FaceButtonLayout"), 0));
         })
         .Options(ComboboxOptions()
@@ -826,7 +840,7 @@ void SohMenu::AddMenuSettings() {
         .CVar(CVAR_SETTING("TouchControls.FloatingLeftStick"))
         .RaceDisable(false)
         .Callback([](WidgetInfo& info) {
-            SetAndroidTouchLeftStickFloating(
+            SetMobileTouchLeftStickFloating(
                 CVarGetInteger(CVAR_SETTING("TouchControls.FloatingLeftStick"), 1) != 0);
         })
         .Options(CheckboxOptions().DefaultValue(true).Tooltip(
@@ -834,14 +848,14 @@ void SohMenu::AddMenuSettings() {
     AddWidget(path, "Transparent Sticks", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_SETTING("TouchControls.TransparentSticks"))
         .RaceDisable(false)
-        .Callback([](WidgetInfo&) { SetAndroidIntegratedTouch(); })
+        .Callback([](WidgetInfo&) { SetMobileIntegratedTouch(); })
         .Options(CheckboxOptions().Tooltip(
             "Hides fixed stick backgrounds and outlines while keeping the small position indicators visible. "
             "Floating sticks are always transparent. The layout editor still shows their bounds."));
     AddWidget(path, "Floating Right Stick", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_SETTING("TouchControls.FloatingRightStick"))
         .RaceDisable(false)
-        .Callback([](WidgetInfo&) { SetAndroidIntegratedTouch(); })
+        .Callback([](WidgetInfo&) { SetMobileIntegratedTouch(); })
         .Options(CheckboxOptions().DefaultValue(true).Tooltip(
             "Sets the right camera stick's origin where you touch inside its area. "
             "When disabled, its origin is fixed. Independent of Floating Left Stick."));
@@ -849,9 +863,9 @@ void SohMenu::AddMenuSettings() {
         .CVar(CVAR_SETTING("TouchControls.Disabled"))
         .RaceDisable(false)
         .Callback([](WidgetInfo& info) {
-            SetAndroidTouchControlsDisabled(CVarGetInteger(CVAR_SETTING("TouchControls.Disabled"), 0) != 0);
+            SetMobileTouchControlsDisabled(CVarGetInteger(CVAR_SETTING("TouchControls.Disabled"), 0) != 0);
         })
-        .Options(CheckboxOptions().Tooltip("Hides the Android touch controls and eye button."));
+        .Options(CheckboxOptions().Tooltip("Hides the touch controls and eye button."));
     AddWidget(path, "Extra Item Slots", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("DpadEquips"))
         .Options(CheckboxOptions().Tooltip(
@@ -872,7 +886,7 @@ void SohMenu::AddMenuSettings() {
     AddWidget(path, "Enable Manual Jump (Experimental)", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("ManualJump"))
         .PreFunc([](WidgetInfo& info) { info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"), 0) == 0; })
-        .Callback([](WidgetInfo&) { SetAndroidIntegratedTouch(); })
+        .Callback([](WidgetInfo&) { SetMobileIntegratedTouch(); })
         .Options(CheckboxOptions().Tooltip(
             "The existing Manual Jump enhancement. Enables grounded jumps and disables automatic ledge jumps. "
             "Touch button choices below are separate from physical controller bindings."));
@@ -887,7 +901,7 @@ void SohMenu::AddMenuSettings() {
             .PreFunc([style](WidgetInfo& info) { info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"),0) != style; })
             .RaceDisable(false)
             .Callback([](WidgetInfo&) {
-                SetAndroidIntegratedTouch();
+                SetMobileIntegratedTouch();
                 Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
             })
             .Options(ComboboxOptions().DefaultIndex(0).ComboMap(touchJumpButtons[style-1]).Tooltip(
@@ -920,7 +934,7 @@ void SohMenu::AddMenuSettings() {
                 }
                 CVarSetInteger(TouchHud::BindingCvar(2, destination), TouchHud::Navi);
             }
-            SetAndroidIntegratedTouch();
+            SetMobileIntegratedTouch();
             Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
         })
         .Options(ComboboxOptions().DefaultIndex(0).ComboMap(touchNaviLocationMap).Tooltip(
@@ -952,7 +966,7 @@ void SohMenu::AddMenuSettings() {
                     if (j != i && touchBindingSnapshot[style][j] == chosen)
                         CVarSetInteger(TouchHud::BindingCvar(style, j), touchBindingSnapshot[style][i]);
                 }
-                SetAndroidIntegratedTouch();
+                SetMobileIntegratedTouch();
                 Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
             })
             .Options(ComboboxOptions().DefaultIndex(TouchHud::DefaultAction(style, i)).ComboMap(touchActionMap).Tooltip(
@@ -969,16 +983,16 @@ void SohMenu::AddMenuSettings() {
             for (int i=0; i<TouchHud::BindingCount; ++i)
                 CVarSetInteger(TouchHud::BindingCvar(style, i), TouchHud::DefaultAction(style, i));
             CVarSetInteger(TouchHud::JumpCvar(style), 0);
-            SetAndroidIntegratedTouch();
+            SetMobileIntegratedTouch();
             Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
         }).Options(ButtonOptions().Tooltip("Restores only this preset's touch assignments. Positions, sizes and physical controllers are unchanged."));
 
-    // Keep Android's persisted overlay state aligned with the native CVars after relaunches.
-    SetAndroidTouchFaceButtonLayout(CVarGetInteger(CVAR_SETTING("TouchControls.FaceButtonLayout"), 0));
-    SetAndroidIntegratedTouch();
-    SetAndroidTouchLeftStickFloating(
+    // Keep the platform's persisted overlay state aligned with the native CVars after relaunches.
+    SetMobileTouchFaceButtonLayout(CVarGetInteger(CVAR_SETTING("TouchControls.FaceButtonLayout"), 0));
+    SetMobileIntegratedTouch();
+    SetMobileTouchLeftStickFloating(
         CVarGetInteger(CVAR_SETTING("TouchControls.FloatingLeftStick"), 1) != 0);
-    SetAndroidTouchControlsDisabled(CVarGetInteger(CVAR_SETTING("TouchControls.Disabled"), 0) != 0);
+    SetMobileTouchControlsDisabled(CVarGetInteger(CVAR_SETTING("TouchControls.Disabled"), 0) != 0);
 #endif
 
     // Input Viewer
