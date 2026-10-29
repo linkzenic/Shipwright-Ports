@@ -13,6 +13,22 @@ int main() {
         l.build(style,844,390,{47,0,47,21},1,state,edit,true,p,b);
     };
     build(gc,2);build(modern,3);build(n64,1);
+    for(auto size:{std::array<float,2>{844,390},{956,440}}) {
+        for(int style:{1,2}) {
+            Layout l;for(int i=0;i<BindingCount;i++)b[i]=DefaultAction(style,i);
+            l.build(style,size[0],size[1],{62,0,62,21},1,0,false,true,p,b);
+            auto diamond=[&](const char* up,const char* down,const char* left,const char* right) {
+                auto u=l.find(up)->bounds,d=l.find(down)->bounds;
+                auto a=l.find(left)->bounds,r=l.find(right)->bounds;
+                assert(std::abs(u.cx()-d.cx())<.01f);
+                assert(std::abs(a.cy()-r.cy())<.01f);
+                assert(std::abs((r.cx()-a.cx())-(d.cy()-u.cy()))<.01f);
+                assert(std::abs((a.cx()+r.cx())/2-u.cx())<.01f);
+            };
+            diamond("du","dd","dl","dr");
+            if(style==1)diamond("cu","cd","cl","cr");
+        }
+    }
     for(auto key:{"settings","start","map"}) {
         assert(gc.find(key)&&modern.find(key));
         auto a=gc.find(key)->bounds,c=modern.find(key)->bounds;

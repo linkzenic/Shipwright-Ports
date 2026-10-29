@@ -77,8 +77,13 @@ struct Layout {
         if(shown||editing) {
             if(style==1) {
                 face("a","A",.79,.80,52,0x346bcc);face("b","B",.70,.69,44,0x38a05f);
-                face("cl","◀",.84,.54,36,yellow);face("cd","▼",.90,.66,36,yellow);
-                face("cr","▶",.96,.54,36,yellow);face("cu","▲",.90,.42,36,yellow);
+                // Keep the whole diamond inside the safe area. Independent
+                // percentage offsets distort spacing on wide phone screens.
+                float ccx=w-right-64*unit,ccy=.54f*h,step=46*unit;
+                face("cl","◀",(ccx-step)/w,ccy/h,36,yellow);
+                face("cd","▼",ccx/w,(ccy+step)/h,36,yellow);
+                face("cr","▶",(ccx+step)/w,ccy/h,36,yellow);
+                face("cu","▲",ccx/w,(ccy-step)/h,36,yellow);
                 add("z","Z",.10,.13,64,32);add("l","L",.10,.25,64,30);add("r","R",.90,.13,64,32);
             } else if(style==2) {
                 auto dock=[&](const char* k,const char* label,float ro,float bo,float size,uint32_t color){face(k,label,(w-safe[2]-(ro+size/2)*unit)/w,(h-(bo+size/2)*unit)/h,size,color);};
@@ -103,8 +108,11 @@ struct Layout {
                 face("du","▲",b.cx()/w,(b.y+arm/2)/h,arm/unit,gray);face("dd","▼",b.cx()/w,(b.y+b.h-arm/2)/h,arm/unit,gray);
                 face("dl","◀",(b.x+arm/2)/w,b.cy()/h,arm/unit,gray);face("dr","▶",(b.x+b.w-arm/2)/w,b.cy()/h,arm/unit,gray);
             } else {
-                face("du","▲",.12,.43,28,gray);face("dd","▼",.12,.59,28,gray);
-                face("dl","◀",.075,.51,28,gray);face("dr","▶",.165,.51,28,gray);
+                float dcx=left+46*unit,dcy=.51f*h,step=32*unit;
+                face("du","▲",dcx/w,(dcy-step)/h,28,gray);
+                face("dd","▼",dcx/w,(dcy+step)/h,28,gray);
+                face("dl","◀",(dcx-step)/w,dcy/h,28,gray);
+                face("dr","▶",(dcx+step)/w,dcy/h,28,gray);
             }
             add("start","Start",.54,.91,66,28);add("settings","Settings",.42,.91,72,28);
             if(style==2||style==3||(style==1&&(state&32))) {
