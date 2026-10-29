@@ -464,9 +464,8 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
 #if defined(__IOS__)
     const auto hasExtractorAssets = [](const std::filesystem::path& root) {
         std::error_code error;
-        return std::filesystem::is_regular_file(root / "assets/Config_N64_NTSC_10.xml", error) && !error &&
-               std::filesystem::is_regular_file(root / "assets/TexturePool.xml", error) && !error &&
-               std::filesystem::is_directory(root / "assets/xml", error) && !error;
+        return std::filesystem::is_regular_file(root / "assets/config.yml", error) && !error &&
+               std::filesystem::is_directory(root / "assets/ntsc_1-0", error) && !error;
     };
 
     // Accept a complete resource set in any supported application location if
