@@ -14,6 +14,8 @@ void SOHiCloudSync_PrepareSaves(void);
 // intentionally applied on the next launch so an active in-memory save cannot
 // overwrite them.
 void SOHiCloudSync_SyncNow(void);
+void SOHiCloudSync_Start(void);
+int SOHiCloudSync_AccountVerified(void);
 
 // Queues reconciliation after a local save is atomically committed or deleted.
 void SOHiCloudSync_LocalSaveChanged(const char* path);

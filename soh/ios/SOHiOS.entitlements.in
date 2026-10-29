@@ -5,10 +5,14 @@
     <key>com.apple.developer.icloud-container-identifiers</key>
     <array>
         <string>@SOH_ICLOUD_CONTAINER_ID@</string>
+        <string>@SOH_ICLOUD_DOCUMENTS_CONTAINER_ID@</string>
     </array>
     <key>com.apple.developer.icloud-services</key>
     <array>
         <string>CloudKit</string>
+        <string>CloudDocuments</string>
     </array>
+    <key>com.apple.developer.ubiquity-container-identifiers</key>
+    <array><string>@SOH_ICLOUD_DOCUMENTS_CONTAINER_ID@</string></array>
 </dict>
 </plist>

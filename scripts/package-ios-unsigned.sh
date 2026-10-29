@@ -31,7 +31,19 @@ rm -f "$PUBLIC_APP/embedded.mobileprovision"
 # A public IPA is intentionally unsigned. A later personal sideload signature
 # cannot authorize Linkzenic's private CloudKit container, so prevent the app
 # from attempting that unavailable service at runtime.
-/usr/libexec/PlistBuddy -c 'Set :SOHCloudKitProvisionedBuild false' "$PUBLIC_APP/Info.plist"
+case "${SOH_PACKAGE_CLOUD:-disabled}" in
+    disabled)
+        /usr/libexec/PlistBuddy -c 'Set :SOHCloudKitProvisionedBuild false' "$PUBLIC_APP/Info.plist"
+        ;;
+    provisioned)
+        if [ "$(/usr/libexec/PlistBuddy -c 'Print :SOHCloudKitProvisionedBuild' "$PUBLIC_APP/Info.plist")" != "true" ]; then
+            echo "Cloud packaging requires a build configured with SOH_ENABLE_ICLOUD=ON." >&2
+            exit 1
+        fi
+        echo "Cloud-enabled unsigned IPA: sign with a profile authorizing the build's configured containers."
+        ;;
+    *) echo "SOH_PACKAGE_CLOUD must be disabled or provisioned." >&2; exit 1 ;;
+esac
 
 REQUIRED_BUNDLE_ITEMS=(
     "Ship of Harkinian"

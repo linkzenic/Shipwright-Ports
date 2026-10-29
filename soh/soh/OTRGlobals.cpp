@@ -12,6 +12,13 @@
 #include <imgui.h>
 
 #include "ResourceManagerHelpers.h"
+#if defined(__IOS__)
+#include "ios/SOHiCloudSync.h"
+#endif
+#if defined(__IOS__) && !defined(__TVOS__)
+#include "ios/SOHNearbySync.h"
+#include "ios/SOHUserFolderSync.h"
+#endif
 #include <fast/Fast3dWindow.h>
 #include <libultraship/bridge/audiobridge.h>
 #include <libultraship/bridge/gfxdebuggerbridge.h>
@@ -287,6 +294,12 @@ static bool sohArchiveVersionMatch = false;
 
 OTRGlobals::OTRGlobals() {
     context = Ship::Context::CreateUninitializedInstance("Ship of Harkinian", appShortName, "shipofharkinian.json");
+#if defined(__TVOS__)
+    SOHTVOSFileServer_ApplyJSONAtLaunch();
+#endif
+#if defined(__IOS__) && !defined(__TVOS__)
+    SOHUserFolderSync_ApplyAtLaunch();
+#endif
 
     portArchivePath = Ship::Context::LocateFileAcrossAppDirs("soh.o2r");
     OTRVersion portArchiveVersion = DetectOTRVersion("soh.o2r", false);
@@ -315,6 +328,9 @@ OTRGlobals::OTRGlobals() {
         BTN_CUSTOM_JUMP,
     }));
     context->InitControlDeck(controlDeck);
+#if defined(__IOS__) && !defined(__TVOS__)
+    SOHNearbySync_ActivateMods();
+#endif
     context->InitResourceManager({ portArchivePath }, {}, 3, true);
     context->InitConsole();
 
@@ -323,6 +339,12 @@ OTRGlobals::OTRGlobals() {
     sohFast3dWindow =
         std::make_shared<Fast::Fast3dWindow>(std::vector<std::shared_ptr<Ship::GuiWindow>>({ sohInputEditorWindow }));
     context->InitWindow(sohFast3dWindow);
+#if defined(__IOS__)
+    SOHiCloudSync_Start();
+#endif
+#if defined(__IOS__) && !defined(__TVOS__)
+    SOHUserFolderSync_Start();
+#endif
 
     SohGui::SetupMenu();
 

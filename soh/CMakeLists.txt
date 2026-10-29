@@ -142,9 +142,13 @@ list(APPEND soh__ ${CMAKE_CURRENT_SOURCE_DIR}/soh/Enhancements/speechsynthesizer
 if(CMAKE_SYSTEM_NAME MATCHES "iOS|tvOS")
     list(APPEND soh__ ${CMAKE_CURRENT_SOURCE_DIR}/ios/SOHiCloudSync.mm)
     list(APPEND soh__ ${CMAKE_CURRENT_SOURCE_DIR}/ios/SOHSaveBridgeSync.mm)
+    list(APPEND soh__ ${CMAKE_CURRENT_SOURCE_DIR}/ios/SOHSharedSaveFiles.mm)
+    list(APPEND soh__ ${CMAKE_CURRENT_SOURCE_DIR}/ios/SOHNearbySync.mm)
     if(SOH_APPLE_TARGET STREQUAL "tvos")
         list(APPEND soh__ ${CMAKE_CURRENT_SOURCE_DIR}/ios/SOHTVOSFileServer.mm)
     else()
+        list(APPEND soh__ ${CMAKE_CURRENT_SOURCE_DIR}/ios/SOHSyncFolder.mm)
+        list(APPEND soh__ ${CMAKE_CURRENT_SOURCE_DIR}/ios/SOHUserFolderSync.mm)
         list(APPEND soh__ ${CMAKE_CURRENT_SOURCE_DIR}/ios/SOHiOSTouchControls.mm)
         list(APPEND soh__ ${CMAKE_CURRENT_SOURCE_DIR}/ios/SOHIntegratedTouchControls.mm)
     endif()
@@ -289,11 +293,17 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "iOS|tvOS")
     set(SOH_IOS_DISPLAY_NAME "Ship of Harkinian" CACHE STRING "Apple app display name")
     set(SOH_ICLOUD_CONTAINER_ID "iCloud.com.shipofharkinian.shared" CACHE STRING
         "Shared CloudKit container for iPhone, iPad, tvOS, and macOS")
+    set(SOH_ICLOUD_DOCUMENTS_CONTAINER_ID "iCloud.com.linkzenic.soh.documents" CACHE STRING
+        "Dedicated iOS iCloud Drive container for SOH user files")
     option(SOH_ENABLE_ICLOUD "Enable iCloud entitlements for Apple builds" ON)
     if(SOH_ENABLE_ICLOUD)
         set(SOH_CLOUDKIT_PROVISIONED true)
+        set(SOH_CLOUD_ENTITLEMENT_TEMPLATE "${CMAKE_CURRENT_SOURCE_DIR}/ios/SOHiOS.entitlements.in")
+        if(SOH_APPLE_TARGET STREQUAL "tvos")
+            set(SOH_CLOUD_ENTITLEMENT_TEMPLATE "${CMAKE_CURRENT_SOURCE_DIR}/ios/SOHTVCloud.entitlements.in")
+        endif()
         configure_file(
-            "${CMAKE_CURRENT_SOURCE_DIR}/ios/SOHiOS.entitlements.in"
+            "${SOH_CLOUD_ENTITLEMENT_TEMPLATE}"
             "${CMAKE_CURRENT_BINARY_DIR}/SOHiOS.entitlements"
             @ONLY
         )
@@ -337,6 +347,9 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "iOS|tvOS")
     )
     target_link_libraries(${PROJECT_NAME} PRIVATE "-framework CloudKit")
     target_link_libraries(${PROJECT_NAME} PRIVATE "-framework Network")
+    if(NOT SOH_APPLE_TARGET STREQUAL "tvos")
+        target_link_libraries(${PROJECT_NAME} PRIVATE "-framework UniformTypeIdentifiers")
+    endif()
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set_target_properties(${PROJECT_NAME} PROPERTIES
     OUTPUT_NAME "soh.elf"

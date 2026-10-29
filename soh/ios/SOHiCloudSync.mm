@@ -1,10 +1,15 @@
 #import "SOHiCloudSync.h"
+#import "SOHSharedSaveFiles.h"
+#include "SaveSyncPolicy.h"
 
 #import <CloudKit/CloudKit.h>
 #import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
+#include <libultraship/bridge/consolevariablebridge.h>
 
 #include <algorithm>
 #include <cstring>
+#include <atomic>
 
 #ifndef SOH_ICLOUD_CONTAINER_ID
 #define SOH_ICLOUD_CONTAINER_ID "iCloud.com.shipofharkinian.shared"
@@ -25,6 +30,7 @@ dispatch_queue_t SyncQueue() {
 
 NSString* gStatus = @"iCloud save sync is ready.";
 NSObject* gStatusLock = [[NSObject alloc] init];
+std::atomic_bool AccountVerified(false);
 
 NSString* ReadStatus() {
     @synchronized(gStatusLock) {
@@ -42,7 +48,7 @@ bool IsProvisionedForCloudKit() {
     NSNumber* provisioned =
         [NSBundle.mainBundle objectForInfoDictionaryKey:@"SOHCloudKitProvisionedBuild"];
     if (provisioned != nil && !provisioned.boolValue) {
-        WriteStatus(@"iCloud save sync requires a Linkzenic-provisioned build. Local saves remain available.");
+        WriteStatus(@"iCloud save sync requires a cloud-enabled build signed with matching iCloud container entitlements. Local saves remain available.");
         return false;
     }
     return true;
@@ -100,10 +106,25 @@ bool WaitForAccount() {
         return false;
     }
     if (accountStatus != CKAccountStatusAvailable) {
+        AccountVerified=false;
         NSString* reason = accountError.localizedDescription ?: @"Sign in to iCloud to synchronize saves.";
         WriteStatus([@"iCloud unavailable: " stringByAppendingString:reason]);
         return false;
     }
+    dispatch_semaphore_t identityReady=dispatch_semaphore_create(0);
+    __block CKRecordID* userID;
+    [Container() fetchUserRecordIDWithCompletionHandler:^(CKRecordID* recordID,NSError* error) {
+        userID=recordID; dispatch_semaphore_signal(identityReady);
+    }];
+    if (dispatch_semaphore_wait(identityReady,dispatch_time(DISPATCH_TIME_NOW,5*NSEC_PER_SEC))!=0 || !userID) {
+        AccountVerified=false; WriteStatus(@"Could not verify the iCloud account. Local saves are unchanged."); return false;
+    }
+    NSString* identity=SOHSaveContentHash([userID.recordName dataUsingEncoding:NSUTF8StringEncoding]);
+    if (![[NSUserDefaults.standardUserDefaults stringForKey:@"SOHCloudAccount"] isEqual:identity]) {
+        [NSUserDefaults.standardUserDefaults removeObjectForKey:@"SOHCloudSaveBaselines"];
+        [NSUserDefaults.standardUserDefaults setObject:identity forKey:@"SOHCloudAccount"];
+    }
+    AccountVerified=true;
     return true;
 }
 
@@ -139,72 +160,26 @@ void UploadPath(NSString* relativePath, CKRecord* existingRecord) {
 
     CKModifyRecordsOperation* operation = [[CKModifyRecordsOperation alloc] initWithRecordsToSave:@[ record ]
                                                                                 recordIDsToDelete:nil];
-    operation.savePolicy = CKRecordSaveAllKeys;
+    operation.savePolicy = CKRecordSaveIfServerRecordUnchanged;
+    NSString* uploadedHash=SOHSaveContentHash([NSData dataWithContentsOfFile:stagingPath]);
+    NSString* account=[NSUserDefaults.standardUserDefaults stringForKey:@"SOHCloudAccount"];
     operation.modifyRecordsCompletionBlock =
         ^(NSArray<CKRecord*>* savedRecords, NSArray<CKRecordID*>* deletedRecordIDs, NSError* error) {
             [[NSFileManager defaultManager] removeItemAtPath:stagingPath error:nil];
             if (error != nil) {
                 WriteStatus([@"iCloud upload failed: " stringByAppendingString:error.localizedDescription]);
-            } else {
+            } else if ([[NSUserDefaults.standardUserDefaults stringForKey:@"SOHCloudAccount"] isEqual:account]) {
+                @synchronized(gStatusLock) {
+                    NSMutableDictionary* bases=[[NSUserDefaults.standardUserDefaults dictionaryForKey:@"SOHCloudSaveBaselines"] mutableCopy] ?: [NSMutableDictionary dictionary];
+                    bases[relativePath.lastPathComponent]=uploadedHash;
+                    [NSUserDefaults.standardUserDefaults setObject:bases forKey:@"SOHCloudSaveBaselines"];
+                }
                 WriteStatus(@"Saves are up to date in iCloud.");
             }
         };
     [Database() addOperation:operation];
 }
 
-void DeleteCloudPath(NSString* relativePath) {
-    CKModifyRecordsOperation* operation =
-        [[CKModifyRecordsOperation alloc] initWithRecordsToSave:nil recordIDsToDelete:@[ RecordID(relativePath) ]];
-    operation.modifyRecordsCompletionBlock =
-        ^(NSArray<CKRecord*>* savedRecords, NSArray<CKRecordID*>* deletedRecordIDs, NSError* error) {
-            if (error != nil && error.code != CKErrorUnknownItem) {
-                WriteStatus([@"iCloud delete failed: " stringByAppendingString:error.localizedDescription]);
-            } else {
-                WriteStatus(@"The deleted save was removed from iCloud.");
-            }
-        };
-    [Database() addOperation:operation];
-}
-
-void ApplyCloudData(NSString* relativePath, NSData* contents, NSDate* modifiedAt) {
-    NSString* destination = AbsolutePath(relativePath);
-    NSFileManager* files = [NSFileManager defaultManager];
-    [files createDirectoryAtPath:destination.stringByDeletingLastPathComponent
-     withIntermediateDirectories:YES attributes:nil error:nil];
-
-    NSData* localContents = [NSData dataWithContentsOfFile:destination];
-    if (localContents != nil && ![localContents isEqualToData:contents]) {
-        NSString* backup = [destination stringByAppendingFormat:@".icloud-conflict-%.0f",
-                                                               NSDate.date.timeIntervalSince1970];
-        [files copyItemAtPath:destination toPath:backup error:nil];
-    }
-
-    NSString* temporary = [destination stringByAppendingString:@".icloud-download"];
-    [files removeItemAtPath:temporary error:nil];
-    if (![contents writeToFile:temporary options:NSDataWritingAtomic error:nil]) {
-        WriteStatus(@"A cloud save downloaded but could not be written locally.");
-        return;
-    }
-    NSError* replaceError = nil;
-    bool replaced = false;
-    if ([files fileExistsAtPath:destination]) {
-        replaced = [files replaceItemAtURL:[NSURL fileURLWithPath:destination]
-                             withItemAtURL:[NSURL fileURLWithPath:temporary]
-                            backupItemName:nil
-                                   options:0
-                          resultingItemURL:nil
-                                     error:&replaceError];
-    } else {
-        replaced = [files moveItemAtPath:temporary toPath:destination error:&replaceError];
-    }
-    if (!replaced) {
-        WriteStatus(@"A cloud save downloaded but could not replace the local copy.");
-        return;
-    }
-    if (modifiedAt != nil) {
-        [files setAttributes:@{ NSFileModificationDate: modifiedAt } ofItemAtPath:destination error:nil];
-    }
-}
 
 void ReconcilePaths(NSArray<NSString*>* relativePaths, bool applyCloudDownloads) {
     if (!WaitForAccount()) {
@@ -263,24 +238,31 @@ void ReconcilePaths(NSArray<NSString*>* relativePaths, bool applyCloudDownloads)
         }
 
         NSData* cloudContents = contentsByPath[relativePath];
-        NSDate* cloudDate = cloudRecord[kModifiedAtField] ?: cloudRecord.modificationDate;
-        if (cloudContents == nil || cloudDate == nil) {
-            continue;
-        }
-
-        if (localDate == nil || [cloudDate compare:localDate] == NSOrderedDescending) {
-            if (applyCloudDownloads) {
-                ApplyCloudData(relativePath, cloudContents, cloudDate);
-            } else {
-                deferredDownload = true;
+        if (cloudContents == nil) continue;
+        NSData* localContents=[NSData dataWithContentsOfFile:localPath];
+        NSString* lh=SOHSaveContentHash(localContents), *rh=SOHSaveContentHash(cloudContents);
+        NSString* base=[NSUserDefaults.standardUserDefaults dictionaryForKey:@"SOHCloudSaveBaselines"][relativePath.lastPathComponent] ?: @"";
+        switch (SaveSync::Plan(lh.UTF8String,rh.UTF8String,base.UTF8String)) {
+            case SaveSync::Action::None: {
+                @synchronized(gStatusLock) {
+                    NSMutableDictionary* bases=[[NSUserDefaults.standardUserDefaults dictionaryForKey:@"SOHCloudSaveBaselines"] mutableCopy] ?: [NSMutableDictionary dictionary];
+                    bases[relativePath.lastPathComponent]=lh;
+                    [NSUserDefaults.standardUserDefaults setObject:bases forKey:@"SOHCloudSaveBaselines"];
+                }
+                break;
             }
-        } else if ([localDate compare:cloudDate] == NSOrderedDescending) {
-            UploadPath(relativePath, cloudRecord);
+            case SaveSync::Action::Upload: UploadPath(relativePath,cloudRecord); break;
+            case SaveSync::Action::Download:
+            case SaveSync::Action::Conflict:
+                if (SOHStageIncomingSave(relativePath.lastPathComponent,cloudContents,lh,@"iCloud",nil,
+                                        SaveSync::Plan(lh.UTF8String,rh.UTF8String,base.UTF8String)==SaveSync::Action::Download)) deferredDownload=true;
+                else WriteStatus(@"Could not stage the iCloud save. Local progress is unchanged.");
+                break;
         }
     }
 
     if (deferredDownload) {
-        WriteStatus(@"A newer iCloud save is available. Restart the app to load it safely.");
+        WriteStatus(@"Incoming iCloud saves are staged. Unambiguous changes apply at file select; conflicting slots need review.");
     } else if ([ReadStatus() hasPrefix:@"Checking"]) {
         WriteStatus(@"Saves are up to date in iCloud.");
     }
@@ -292,10 +274,29 @@ extern "C" void SOHiCloudSync_PrepareSaves(void) {
     if (!IsProvisionedForCloudKit()) {
         return;
     }
-    dispatch_sync(SyncQueue(), ^{
+    dispatch_async(SyncQueue(), ^{
         ReconcilePaths(SaveRelativePaths(), true);
     });
 }
+extern "C" void SOHiCloudSync_Start(void) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        static id foregroundObserver, accountObserver;
+        static NSTimer* timer;
+        void (^check)(void)=^{ if (CVarGetInteger("gSettings.iCloudSync.Saves",0)) SOHiCloudSync_SyncNow(); };
+        if (!foregroundObserver) foregroundObserver=[NSNotificationCenter.defaultCenter addObserverForName:UIApplicationDidBecomeActiveNotification object:nil queue:nil usingBlock:^(NSNotification* note) { check(); }];
+        if (!accountObserver) accountObserver=[NSNotificationCenter.defaultCenter addObserverForName:CKAccountChangedNotification object:nil queue:nil usingBlock:^(NSNotification* note) {
+            AccountVerified=false;
+            [NSUserDefaults.standardUserDefaults removeObjectForKey:@"SOHCloudSaveBaselines"];
+            WriteStatus(@"iCloud account changed. Existing local saves are preserved; different cloud saves require review.");
+            check();
+        }];
+        if (!timer) timer=[NSTimer scheduledTimerWithTimeInterval:60 repeats:YES block:^(NSTimer* timer) {
+            if (UIApplication.sharedApplication.applicationState==UIApplicationStateActive) check();
+        }];
+        check();
+    });
+}
+extern "C" int SOHiCloudSync_AccountVerified(void) { return AccountVerified; }
 
 extern "C" void SOHiCloudSync_SyncNow(void) {
     if (!IsProvisionedForCloudKit()) {
@@ -339,7 +340,7 @@ extern "C" void SOHiCloudSync_LocalSaveDeleted(const char* path) {
     NSString* relativePath = [absolutePath substringFromIndex:documents.length + 1];
     dispatch_async(SyncQueue(), ^{
         if (WaitForAccount()) {
-            DeleteCloudPath(relativePath);
+            ReconcilePaths(@[relativePath],false); // Missing files never delete remote progress automatically.
         }
     });
 }

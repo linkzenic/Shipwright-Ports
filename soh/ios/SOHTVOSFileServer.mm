@@ -1,5 +1,6 @@
 #import "SOHTVOSFileServer.h"
 #import "SOHiCloudSync.h"
+#import "SOHSharedSaveFiles.h"
 #include "TVOSNetworkInterface.h"
 
 #import <Foundation/Foundation.h>
@@ -43,10 +44,18 @@ void WriteStatus(NSString* status) {
 }
 
 NSString* DocumentsPath() {
-    NSArray<NSString*>* paths =
-        NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES);
-    NSString* caches = paths.firstObject ?: [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Caches"];
-    return [caches stringByAppendingPathComponent:@"Ship of Harkinian"];
+    return SOHAppleDataDirectory();
+}
+
+bool IsJSONName(NSString* name) {
+    NSCharacterSet* allowed=[NSCharacterSet characterSetWithCharactersInString:@"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-."];
+    return name.length>5 && name.length<128 && ![name hasPrefix:@"."] &&
+        [name.pathExtension.lowercaseString isEqual:@"json"] &&
+        [name rangeOfCharacterFromSet:allowed.invertedSet].location==NSNotFound;
+}
+bool ValidJSON(NSData* data) {
+    return data.length>0 && data.length<=8*1024*1024 &&
+        [[NSJSONSerialization JSONObjectWithData:data options:0 error:nil] isKindOfClass:NSDictionary.class];
 }
 
 NSString* TransferURL() {
@@ -119,9 +128,13 @@ NSData* TransferPage() {
          "#status{white-space:pre-wrap;margin-top:14px;color:#a9d9ff}</style></head><body>"
          "<h1>Ship of Harkinian</h1><section><p>Upload game data, mods, or SOH save files to this Apple TV."
          " Save uploads synchronize through private iCloud when iCloud save sync is enabled.</p>"
+         "<p>Download saves: <a href='/download/file1.sav' download>File 1</a> · "
+         "<a href='/download/file2.sav' download>File 2</a> · "
+         "<a href='/download/file3.sav' download>File 3</a> · "
+         "<a href='/download/global.sav' download>Global settings</a></p>"
          "<select id=folder><option value=root>Game data</option><option value=mods>Mod</option>"
-         "<option value=saves>Save files</option></select><br>"
-         "<input id=file type=file multiple accept='.o2r,.otr,.z64,.n64,.v64,.sav'><br>"
+         "<option value=saves>Save files</option><option value=json>JSON settings (apply after restart)</option></select><br>"
+         "<input id=file type=file multiple accept='.o2r,.otr,.z64,.n64,.v64,.sav,.json'><br>"
          "<button onclick=uploadFiles()>Upload</button><progress id=progress max=100 value=0></progress>"
          "<div id=status>Ready.</div></section><script>"
          "const fileInput=document.getElementById('file'),folderInput=document.getElementById('folder'),"
@@ -136,7 +149,7 @@ NSData* TransferPage() {
          "x.onerror=()=>{statusText.textContent='Network connection interrupted.';fail(new Error('network'))};"
          "statusText.textContent='Uploading '+f.name+'…';x.send(f)}).catch(()=>{"
          "throw new Error(statusText.textContent)})}"
-         "statusText.textContent='Upload complete. Choose Rescan on the Apple TV.'}</script></body></html>";
+         "statusText.textContent+='\\nAll uploads finished.'}</script></body></html>";
     return HTTPResponse(200, @"OK", @"text/html; charset=utf-8",
                         [html dataUsingEncoding:NSUTF8StringEncoding]);
 }
@@ -174,6 +187,7 @@ void SendAndClose(nw_connection_t connection, NSData* response) {
 @property(nonatomic, copy) NSString* destinationPath;
 @property(nonatomic, copy) NSString* displayName;
 @property(nonatomic) BOOL uploadedSave;
+@property(nonatomic) BOOL uploadedJSON;
 @property(nonatomic) uint64_t contentLength;
 @property(nonatomic) uint64_t receivedLength;
 @property(nonatomic) BOOL headersComplete;
@@ -288,6 +302,16 @@ void SendAndClose(nw_connection_t connection, NSData* response) {
         SendAndClose(self.connection, TransferPage());
         return NO;
     }
+    if ([method isEqualToString:@"GET"] && [target hasPrefix:@"/download/"]) {
+        NSString* name=[target substringFromIndex:10];
+        if (![@[@"file1.sav",@"file2.sav",@"file3.sav",@"global.sav"] containsObject:name]) {
+            [self fail:@"Only the four SOH save files can be downloaded." status:404]; return NO;
+        }
+        NSData* save=[NSData dataWithContentsOfFile:[SOHAppleSaveDirectory() stringByAppendingPathComponent:name]];
+        self.finished=YES;
+        SendAndClose(self.connection,save ? HTTPResponse(200,@"OK",@"application/octet-stream",save) : TextResponse(404,@"Not Found",@"This save slot is empty."));
+        return NO;
+    }
     if (![method isEqualToString:@"PUT"] || ![target hasPrefix:@"/upload/"]) {
         [self fail:@"Open the root page and use its Upload button." status:404];
         return NO;
@@ -339,6 +363,13 @@ void SendAndClose(nw_connection_t connection, NSData* response) {
         }
         directory = [directory stringByAppendingPathComponent:@"Save"];
         self.uploadedSave = YES;
+    } else if ([category isEqualToString:@"json"]) {
+        if (!IsJSONName(filename) || contentLength>8*1024*1024) {
+            [self fail:@"JSON settings require a safe .json filename and a size of at most 8 MB." status:415];
+            return NO;
+        }
+        directory=[SOHAppleSyncDirectory() stringByAppendingPathComponent:@"LANJSON"];
+        self.uploadedJSON=YES;
     } else if ([category isEqualToString:@"root"]) {
         if (!IsAllowedGameDataExtension(filename)) {
             [self fail:@"Game data must be .o2r, .otr, .z64, .n64, or .v64 files." status:415];
@@ -407,6 +438,23 @@ void SendAndClose(nw_connection_t connection, NSData* response) {
     [self.output closeFile];
     self.output = nil;
 
+    if (self.uploadedJSON && !ValidJSON([NSData dataWithContentsOfFile:self.temporaryPath])) {
+        [NSFileManager.defaultManager removeItemAtPath:self.temporaryPath error:nil];
+        WriteStatus(@"JSON rejected: a valid JSON object is required. Existing settings are unchanged.");
+        SendAndClose(self.connection,TextResponse(422,@"Invalid JSON",ReadStatus()));
+        return;
+    }
+    if (self.uploadedSave) {
+        NSData* incoming=[NSData dataWithContentsOfFile:self.temporaryPath];
+        NSData* current=[NSData dataWithContentsOfFile:self.destinationPath];
+        BOOL staged=SOHStageIncomingSave(self.displayName,incoming,SOHSaveContentHash(current),@"LAN upload",nil,current==nil);
+        [NSFileManager.defaultManager removeItemAtPath:self.temporaryPath error:nil];
+        WriteStatus(staged ? @"Save received safely. Return to file select; differing slots need review in Settings." : @"Save upload rejected: invalid data or storage unavailable.");
+        SendAndClose(self.connection,TextResponse(staged ? 201 : 422,staged ? @"Created" : @"Invalid Save",
+            staged ? @"Save staged. Return to file select on Apple TV and review any conflicting slot in Settings. It will sync to iCloud after being applied." : @"The upload is not a valid SOH save or could not be staged."));
+        return;
+    }
+
     NSFileManager* files = [NSFileManager defaultManager];
     NSError* error = nil;
     BOOL installed = NO;
@@ -423,6 +471,12 @@ void SendAndClose(nw_connection_t connection, NSData* response) {
             stringByAppendingString:error.localizedDescription ?: @"unknown storage error"]);
         SendAndClose(self.connection, TextResponse(500, @"Internal Server Error",
                                                    @"The file arrived but could not be installed."));
+        return;
+    }
+
+    if (self.uploadedJSON) {
+        WriteStatus(@"JSON received. Fully close and reopen the app to apply it. Previous settings will be preserved in history.");
+        SendAndClose(self.connection,TextResponse(201,@"Created",ReadStatus()));
         return;
     }
 
@@ -452,6 +506,29 @@ void SendAndClose(nw_connection_t connection, NSData* response) {
 }
 
 @end
+
+extern "C" void SOHTVOSFileServer_ApplyJSONAtLaunch(void) {
+    NSFileManager* files=NSFileManager.defaultManager;
+    NSString* pending=[SOHAppleSyncDirectory() stringByAppendingPathComponent:@"LANJSON"];
+    for (NSString* name in [files contentsOfDirectoryAtPath:pending error:nil]) {
+        if (!IsJSONName(name)) continue;
+        NSString* source=[pending stringByAppendingPathComponent:name];
+        NSString* destination=[DocumentsPath() stringByAppendingPathComponent:name];
+        NSDictionary* sourceAttributes=[files attributesOfItemAtPath:source error:nil];
+        NSDictionary* targetAttributes=[files attributesOfItemAtPath:destination error:nil];
+        if (![sourceAttributes[NSFileType] isEqual:NSFileTypeRegular] ||
+            (targetAttributes && ![targetAttributes[NSFileType] isEqual:NSFileTypeRegular]) ||
+            !ValidJSON([NSData dataWithContentsOfFile:source])) continue;
+        if (targetAttributes) {
+            NSString* history=[[SOHAppleSyncDirectory() stringByAppendingPathComponent:@"History"] stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
+            if (![files createDirectoryAtPath:history withIntermediateDirectories:YES attributes:nil error:nil] ||
+                ![files copyItemAtPath:destination toPath:[history stringByAppendingPathComponent:name] error:nil]) continue;
+            [files replaceItemAtURL:[NSURL fileURLWithPath:destination] withItemAtURL:[NSURL fileURLWithPath:source] backupItemName:nil options:0 resultingItemURL:nil error:nil];
+        } else {
+            [files moveItemAtPath:source toPath:destination error:nil];
+        }
+    }
+}
 
 extern "C" void SOHTVOSFileServer_Start(void) {
     WriteStatus([NSString stringWithFormat:@"Starting Apple TV file transfer… Open %@",

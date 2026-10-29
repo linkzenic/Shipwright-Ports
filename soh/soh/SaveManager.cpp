@@ -33,6 +33,10 @@ extern "C" {
 
 #if defined(__IOS__)
 #include "ios/SOHiCloudSync.h"
+#include "ios/SOHNearbySync.h"
+#if !defined(__TVOS__)
+#include "ios/SOHUserFolderSync.h"
+#endif
 #endif
 
 extern "C" SaveContext gSaveContext;
@@ -556,6 +560,7 @@ void SaveManager::Init() {
     // Wait on saves that snuck through the Wait in OnExitGame
     ThreadPoolWait();
 #if defined(__IOS__)
+    SOHNearbySync_PrepareSaves();
     if (CVarGetInteger(CVAR_SETTING("iCloudSync.Saves"), 0)) {
         SOHiCloudSync_PrepareSaves();
     }
@@ -1310,6 +1315,9 @@ void SaveManager::SaveFileThreaded(int fileNum, const SaveContext& saveContext, 
     InitMeta(fileNum);
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnSaveFile>(fileNum, sectionID);
     SPDLOG_INFO("Save File Finish - fileNum: {}", fileNum);
+#if defined(__IOS__) && !defined(__TVOS__)
+    SOHUserFolderSync_Changed();
+#endif
 #if defined(__IOS__)
     if (CVarGetInteger(CVAR_SETTING("iCloudSync.Saves"), 0)) {
         SOHiCloudSync_LocalSaveChanged(GetFileName(fileNum).string().c_str());

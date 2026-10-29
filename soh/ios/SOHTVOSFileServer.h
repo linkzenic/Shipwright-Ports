@@ -7,6 +7,7 @@ extern "C" {
 #endif
 
 void SOHTVOSFileServer_Start(void);
+void SOHTVOSFileServer_ApplyJSONAtLaunch(void);
 void SOHTVOSFileServer_Stop(void);
 int SOHTVOSFileServer_IsRunning(void);
 void SOHTVOSFileServer_GetStatus(char* buffer, size_t bufferSize);

@@ -12,6 +12,10 @@
     <string>${MACOSX_BUNDLE_GUI_IDENTIFIER}</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
+    <key>CFBundleIconFiles</key>
+    <array>
+        <string>AppIcon60x60</string>
+    </array>
     <key>CFBundleName</key>
     <string>Ship of Harkinian</string>
     <key>CFBundlePackageType</key>
@@ -36,10 +40,9 @@
     <key>NSBonjourServices</key>
     <array>
         <string>_soh-transfer._tcp</string>
-        <string>_linkzenic-savebridge._tcp</string>
     </array>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>Ship of Harkinian uses your local network to transfer game data and synchronize saves with Save Bridge.</string>
+    <string>Ship of Harkinian uses your local network for file transfers.</string>
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsLocalNetworking</key>
@@ -47,6 +50,15 @@
     </dict>
     <key>SOHCloudKitProvisionedBuild</key>
     <@SOH_CLOUDKIT_PROVISIONED@/>
+    <key>NSUbiquitousContainers</key>
+    <dict>
+        <key>@SOH_ICLOUD_DOCUMENTS_CONTAINER_ID@</key>
+        <dict>
+            <key>NSUbiquitousContainerName</key><string>SOH</string>
+            <key>NSUbiquitousContainerIsDocumentScopePublic</key><true/>
+            <key>NSUbiquitousContainerSupportedFolderLevels</key><string>Any</string>
+        </dict>
+    </dict>
     <key>LSSupportsOpeningDocumentsInPlace</key>
     <true/>
     <key>UIFileSharingEnabled</key>

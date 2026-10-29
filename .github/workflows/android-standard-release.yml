@@ -1,9 +1,10 @@
-name: Standard Android 9.3.1 Release APK
+name: Standard Android Release APK
 
 on:
   push:
     branches: [android-9.3.1-integration]
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -14,7 +15,7 @@ concurrency:
 
 jobs:
   android:
-    if: github.repository == 'linkzenic/Shipwright-Android'
+    if: github.repository == 'linkzenic/Shipwright-Ports'
     runs-on: ubuntu-24.04
     timeout-minutes: 100
     steps:

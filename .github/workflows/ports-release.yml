@@ -1,0 +1,81 @@
+name: Android iOS tvOS Release Builds
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ports-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  android:
+    if: github.repository == 'linkzenic/Shipwright-Ports'
+    uses: ./.github/workflows/android-standard-release.yml
+    secrets: inherit
+
+  apple-support:
+    if: github.repository == 'linkzenic/Shipwright-Ports'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install host dependencies
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libzip-dev libpng-dev zlib1g-dev
+      - name: Generate ROM-free support archive
+        run: |
+          cmake -S . -B build-host-tools -G Ninja -DSOH_TOOLS_ONLY=ON -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-host-tools --target GenerateSohOtr --parallel 4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Apple-Support-Archive
+          path: build-host-tools/soh/soh.o2r
+          if-no-files-found: error
+          retention-days: 7
+
+  apple:
+    needs: apple-support
+    runs-on: macos-15
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: iOS
+            mode: --device
+            app: build-ios-device/soh/Release-iphoneos/Ship of Harkinian.app
+          - platform: tvOS
+            mode: --tvos-device
+            app: build-tvos-device/soh/Release-appletvos/Ship of Harkinian.app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/download-artifact@v4
+        with:
+          name: Apple-Support-Archive
+          path: soh
+      - name: Install build tools
+        run: brew install cmake ninja pkg-config
+      - name: Build release app
+        env:
+          SOH_IOS_VERSION: 9.3.1
+          SOH_IOS_BUILD_NUMBER: '20'
+          SOH_IOS_DISPLAY_NAME: Ship of Harkinian
+          SOH_ENABLE_ICLOUD: 'OFF'
+          DEPLOYMENT_TARGET: '15.0'
+          CMAKE_BUILD_PARALLEL_LEVEL: '4'
+        run: scripts/build-ios.sh '${{ matrix.mode }}'
+      - name: Package unsigned IPA
+        run: scripts/package-ios-unsigned.sh '${{ matrix.app }}' 'dist/Ship-of-Harkinian-9.3.1-${{ matrix.platform }}-unsigned.ipa'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SOH-9.3.1-${{ matrix.platform }}
+          path: |
+            dist/*.ipa
+            docs/APPLE_CLOUD_SIGNING.md
+          if-no-files-found: error
+          retention-days: 14

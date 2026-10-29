@@ -1,6 +1,8 @@
 // Exercise the production response/teardown path without writing app data.
 #import "../../soh/ios/SOHTVOSFileServer.mm"
 #include <cassert>
+#include <string>
+std::string SaveSyncTestRoot;
 
 extern "C" void SOHiCloudSync_LocalSaveChanged(const char*) {}
 

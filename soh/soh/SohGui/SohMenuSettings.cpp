@@ -17,10 +17,11 @@
 #endif
 #if defined(__IOS__)
 #include "ios/SOHiCloudSync.h"
-#include "ios/SOHSaveBridgeSync.h"
+#include "ios/SOHNearbySync.h"
 #endif
 #if defined(__IOS__) && !defined(__TVOS__)
 #include "ios/SOHiOSTouchControls.h"
+#include "ios/SOHUserFolderSync.h"
 #endif
 #ifdef __TVOS__
 #include "ios/SOHTVOSFileServer.h"
@@ -418,36 +419,33 @@ void SohMenu::AddMenuSettings() {
         .Options(ButtonOptions().Tooltip("Opens the folder that contains the save and mods folders, etc."));
 #endif
 #if defined(__IOS__)
-    AddWidget(path, "Save Bridge", WIDGET_SEPARATOR_TEXT);
-#if !defined(__TVOS__)
-    AddWidget(path, "Save Bridge Pairing", WIDGET_CUSTOM).CustomFunction([](WidgetInfo& info) {
-        static char pairingCode[7] = {};
-        ImGui::TextUnformatted("Enter the six-digit code shown in Linkzenic Save Bridge on your Mac.");
-        ImGui::SetNextItemWidth(140.0f);
-        ImGui::InputText("Pairing Code", pairingCode, sizeof(pairingCode), ImGuiInputTextFlags_CharsDecimal);
-        ImGui::SameLine();
-        if (ImGui::Button("Pair with Save Bridge")) {
-            SOHSaveBridgeSync_Pair(pairingCode);
+    AddWidget(path, "Save Conflicts", WIDGET_SEPARATOR_TEXT);
+    AddWidget(path, "Incoming Save Review", WIDGET_CUSTOM).CustomFunction([](WidgetInfo& info) {
+        ImGui::TextWrapped("Choose separately for each slot. Choices return to file select without saving current gameplay. Save your game first.");
+        bool any = false;
+        for (int slot = 0; slot < 4; ++slot) {
+            char summary[1024] = {};
+            int versions = SOHNearbySync_GetSlot(slot, summary, sizeof(summary));
+            if (!versions) continue;
+            any = true;
+            ImGui::PushID(slot);
+            ImGui::TextWrapped("%s", summary);
+            if (versions == 1 && ImGui::Button("Use Incoming for This Slot")) SOHNearbySync_ChooseSlot(slot, 1);
+            if (versions > 1) ImGui::TextWrapped("Multiple incoming versions: keep local, then receive again from your preferred source.");
+            if (ImGui::Button("Keep Local for This Slot")) SOHNearbySync_ChooseSlot(slot, 0);
+            ImGui::PopID();
         }
+        if (!any) ImGui::TextUnformatted("No incoming saves need review.");
+    });
+#if !defined(__TVOS__)
+    AddWidget(path, "SOH in iCloud Drive", WIDGET_CUSTOM).CustomFunction([](WidgetInfo& info) {
+        char status[512] = {};
+        SOHUserFolderSync_GetStatus(status, sizeof(status));
+        ImGui::TextWrapped("%s", status);
+        ImGui::TextWrapped("User files sync automatically. External JSON and resource changes apply next launch. Local copies remain available offline.");
+        if (!SOHUserFolderSync_HasNativeFolder() && ImGui::Button("Choose Fallback Folder")) SOHUserFolderSync_ChooseFallback();
     });
 #endif
-    AddWidget(path, "Sync Saves with Save Bridge", WIDGET_BUTTON)
-        .RaceDisable(false)
-        .Callback([](WidgetInfo& info) { SOHSaveBridgeSync_SyncNow(); })
-        .Options(ButtonOptions().Tooltip(
-            "Finds the paired Mac on your home network and transfers the newer copy of each SOH save file."));
-    AddWidget(path, "Reload Downloaded Saves", WIDGET_BUTTON)
-        .RaceDisable(false)
-        .Callback([](WidgetInfo& info) { SOHSaveBridgeSync_ReloadDownloadedSaves(); })
-        .Options(ButtonOptions().Tooltip(
-            "After Save Bridge downloads newer saves, safely returns to file select without triggering soft-reset autosave."));
-    AddWidget(path, "Save Bridge Status", WIDGET_CUSTOM).CustomFunction([](WidgetInfo& info) {
-        char status[384] = {};
-        SOHSaveBridgeSync_GetStatus(status, sizeof(status));
-        ImGui::PushTextWrapPos(ImGui::GetContentRegionAvail().x);
-        ImGui::TextUnformatted(status);
-        ImGui::PopTextWrapPos();
-    });
 
     AddWidget(path, "iCloud Save Sync", WIDGET_SEPARATOR_TEXT);
     AddWidget(path, "Sync Saves with iCloud", WIDGET_CVAR_CHECKBOX)
@@ -461,7 +459,7 @@ void SohMenu::AddMenuSettings() {
         .Options(CheckboxOptions()
                      .DefaultValue(0)
                      .Tooltip("Synchronizes the three save slots and global save through the private iCloud account. "
-                              "Game archives, mods, graphics settings, and touch controls remain local."));
+                              "On iOS, user files also mirror to the visible SOH folder in iCloud Drive. Apple TV uses its IP-address page for mods and other files."));
     AddWidget(path, "Sync Saves Now", WIDGET_BUTTON)
         .RaceDisable(false)
         .Callback([](WidgetInfo& info) {
