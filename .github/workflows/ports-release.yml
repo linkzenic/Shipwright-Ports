@@ -1,6 +1,8 @@
 name: Android iOS tvOS Release Builds
 
 on:
+  push:
+    branches: [apple-platform-parity]
   workflow_dispatch:
 
 permissions:
