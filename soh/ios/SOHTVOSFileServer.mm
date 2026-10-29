@@ -1,5 +1,6 @@
 #import "SOHTVOSFileServer.h"
 #import "SOHiCloudSync.h"
+#include "TVOSNetworkInterface.h"
 
 #import <Foundation/Foundation.h>
 #import <Network/Network.h>
@@ -55,16 +56,20 @@ NSString* TransferURL() {
     }
 
     NSString* result = nil;
+    int bestScore = -1;
     for (struct ifaddrs* current = interfaces; current != nullptr; current = current->ifa_next) {
         if (current->ifa_addr == nullptr || current->ifa_addr->sa_family != AF_INET ||
             (current->ifa_flags & IFF_UP) == 0 || (current->ifa_flags & IFF_LOOPBACK) != 0) {
             continue;
         }
+        const auto address = ntohl(reinterpret_cast<struct sockaddr_in*>(current->ifa_addr)->sin_addr.s_addr);
+        const int score = TVOSNetwork::InterfaceScore(current->ifa_name, address);
+        if (score <= bestScore) continue;
         char host[NI_MAXHOST] = {};
         if (getnameinfo(current->ifa_addr, sizeof(struct sockaddr_in), host, sizeof(host),
                         nullptr, 0, NI_NUMERICHOST) == 0) {
             result = [NSString stringWithFormat:@"http://%s:8080", host];
-            break;
+            bestScore = score;
         }
     }
     freeifaddrs(interfaces);
@@ -147,7 +152,14 @@ void SendAndClose(nw_connection_t connection, NSData* response) {
         dispatch_data_create(bytes, response.length, ServerQueue(), DISPATCH_DATA_DESTRUCTOR_FREE);
     nw_connection_send(connection, payload, NW_CONNECTION_DEFAULT_MESSAGE_CONTEXT, true,
                        ^(nw_error_t error) {
-                           nw_connection_cancel(connection);
+                           if (error != nullptr) {
+                               WriteStatus(@"Could not complete the transfer response. Check the installed file before retrying.");
+                               nw_connection_cancel(connection);
+                               return;
+                           }
+                           // Allow Safari to receive the final response before teardown.
+                           dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 250 * NSEC_PER_MSEC),
+                                          ServerQueue(), ^{ nw_connection_cancel(connection); });
                        });
 }
 

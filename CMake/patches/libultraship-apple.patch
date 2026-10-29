@@ -845,7 +845,7 @@ index 489273b6..fc75c880 100644
      pthread_mutex_lock(&mMutex);
      size_t buffered;
 diff --git a/src/ship/window/gui/Gui.cpp b/src/ship/window/gui/Gui.cpp
-index 1f9279bd..066f8325 100644
+index 1f9279bd..9110e920 100644
 --- a/src/ship/window/gui/Gui.cpp
 +++ b/src/ship/window/gui/Gui.cpp
 @@ -65,7 +65,11 @@ void Gui::Init() {
@@ -881,7 +881,20 @@ index 1f9279bd..066f8325 100644
  #endif
  
      mImGuiIniPath = Context::GetPathRelativeToAppDirectory("imgui.ini");
-@@ -202,7 +212,11 @@ void Gui::DrawMenu() {
+@@ -175,8 +185,12 @@ void Gui::RefreshImGuiGamepads() {
+ 
+ void Gui::UpdateGamepadNavigation() {
+     const bool navWanted = Context::GetRawInstance()->GetConsoleVariables()->GetInteger(CVAR_IMGUI_CONTROLLER_NAV, 0) &&
++#ifdef __TVOS__
++                           true; // Controller-first, including startup transfer dialogs.
++#else
+                            (GetMenuOrMenubarVisible() ||
+                             ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel));
++#endif
+     if (navWanted) {
+         mImGuiIo->ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+     } else {
+@@ -202,7 +216,11 @@ void Gui::DrawMenu() {
  
      const ImGuiViewport* viewport = ImGui::GetMainViewport();
      ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -893,7 +906,7 @@ index 1f9279bd..066f8325 100644
      ImGui::SetNextWindowViewport(viewport->ID);
      ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
      ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-@@ -226,9 +240,13 @@ void Gui::DrawMenu() {
+@@ -226,9 +244,13 @@ void Gui::DrawMenu() {
  
      ImGui::DockSpace(dockId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None | ImGuiDockNodeFlags_NoDockingInCentralNode);
  
@@ -909,12 +922,13 @@ index 1f9279bd..066f8325 100644
          if ((ImGui::IsKeyPressed(ImGuiKey_Escape, false) || ImGui::IsKeyPressed(TOGGLE_PAD_BTN, false)) && GetMenu()) {
              GetMenu()->ToggleVisibility();
          } else if ((ImGui::IsKeyPressed(TOGGLE_BTN, false) || ImGui::IsKeyPressed(TOGGLE_PAD_BTN, false)) &&
-@@ -286,8 +304,14 @@ void Gui::HandleMouseCapture() {
+@@ -286,8 +308,15 @@ void Gui::HandleMouseCapture() {
  
  void Gui::StartFrame() {
      HandleMouseCapture();
 +#ifdef __TVOS__
 +    RefreshImGuiGamepads();
++    UpdateGamepadNavigation();
 +#endif
      ImGuiBackendNewFrame();
      ImGuiWMNewFrame();
