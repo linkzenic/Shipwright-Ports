@@ -10,8 +10,6 @@ The repository was renamed from `Shipwright-Android` to `Shipwright-Ports`. Exis
 
 Download published builds from [Releases](https://github.com/linkzenic/Shipwright-Ports/releases). Read the notes for the release you install; the latest published release may not yet include every platform.
 
-**The new unified Android, iOS, and tvOS release is currently being prepared.** GitHub Actions artifacts are build candidates, not published releases.
-
 No game ROMs or extracted game assets are included. You must supply a supported, legally obtained Ocarina of Time ROM. Check compatibility with [the ROM checker](https://ship.equipment/) or [supported hashes](docs/supportedHashes.json).
 
 ## Android
