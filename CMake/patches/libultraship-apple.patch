@@ -262,7 +262,7 @@ index 66bf70d0..210e9aab 100644
  endif()
  
 diff --git a/src/fast/Fast3dGui.cpp b/src/fast/Fast3dGui.cpp
-index 237a502a..1a595b65 100644
+index 237a502a..4b588da3 100644
 --- a/src/fast/Fast3dGui.cpp
 +++ b/src/fast/Fast3dGui.cpp
 @@ -9,6 +9,7 @@
@@ -309,7 +309,7 @@ index 237a502a..1a595b65 100644
  #ifdef ENABLE_DX11
          case WindowBackend::FAST3D_DXGI_DX11:
              ImGui_ImplWin32_WndProcHandler(static_cast<HWND>(event.Win32.Handle), event.Win32.Msg, event.Win32.Param1,
-@@ -226,6 +248,16 @@ void Fast3dGui::ImGuiWMNewFrame() {
+@@ -226,6 +248,24 @@ void Fast3dGui::ImGuiWMNewFrame() {
          case WindowBackend::FAST3D_SDL_OPENGL:
          case WindowBackend::FAST3D_SDL_METAL:
              ImGui_ImplSDL2_NewFrame();
@@ -318,6 +318,14 @@ index 237a502a..1a595b65 100644
 +                int width = 0, height = 0, pixelsX = 0, pixelsY = 0;
 +                SDL_GetWindowSize(static_cast<SDL_Window*>(mImpl.Metal.Window), &width, &height);
 +                SDL_GetRendererOutputSize(mImpl.Metal.Renderer, &pixelsX, &pixelsY);
++                static int lastWidth = 0, lastHeight = 0, lastPixelsX = 0, lastPixelsY = 0;
++                if (width != lastWidth || height != lastHeight || pixelsX != lastPixelsX || pixelsY != lastPixelsY) {
++                    SPDLOG_INFO("Apple menu surface: logical {}x{}, drawable {}x{}", width, height, pixelsX, pixelsY);
++                    lastWidth = width;
++                    lastHeight = height;
++                    lastPixelsX = pixelsX;
++                    lastPixelsY = pixelsY;
++                }
 +                if (width > 0 && height > 0) {
 +                    mImGuiIo->DisplayFramebufferScale = ImVec2(float(pixelsX) / width, float(pixelsY) / height);
 +                }
@@ -326,7 +334,7 @@ index 237a502a..1a595b65 100644
              break;
  #ifdef ENABLE_DX11
          case WindowBackend::FAST3D_DXGI_DX11:
-@@ -320,8 +352,14 @@ void Fast3dGui::CalculateGameViewport() {
+@@ -320,8 +360,14 @@ void Fast3dGui::CalculateGameViewport() {
      mainPos.y -= mTemporaryWindowPos.y;
      ImVec2 size = ImGui::GetContentRegionAvail();
      const auto interpreter = mInterpreter.lock().get();
@@ -343,7 +351,7 @@ index 237a502a..1a595b65 100644
      interpreter->mGameWindowViewport.x = (int16_t)mainPos.x;
      interpreter->mGameWindowViewport.y = (int16_t)mainPos.y;
      interpreter->mGameWindowViewport.width = (int16_t)size.x;
-@@ -375,6 +413,7 @@ void Fast3dGui::DrawGame() {
+@@ -375,6 +421,7 @@ void Fast3dGui::DrawGame() {
  
      ImVec2 mainPos = ImGui::GetWindowPos();
      ImVec2 size = ImGui::GetContentRegionAvail();
@@ -351,7 +359,7 @@ index 237a502a..1a595b65 100644
      ImVec2 pos = ImVec2(0, 0);
      const auto interpreter = mInterpreter.lock().get();
  
-@@ -414,6 +453,13 @@ void Fast3dGui::DrawGame() {
+@@ -414,6 +461,13 @@ void Fast3dGui::DrawGame() {
                            float(interpreter->mCurDimensions.height) * factor);
          }
      }
@@ -366,7 +374,7 @@ index 237a502a..1a595b65 100644
      if (fb) {
          ImGui::SetCursorPos(pos);
 diff --git a/src/fast/backends/gfx_sdl2.cpp b/src/fast/backends/gfx_sdl2.cpp
-index 15c5415f..94a87d43 100644
+index 15c5415f..73a196a1 100644
 --- a/src/fast/backends/gfx_sdl2.cpp
 +++ b/src/fast/backends/gfx_sdl2.cpp
 @@ -39,6 +39,10 @@

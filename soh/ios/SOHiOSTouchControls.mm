@@ -560,7 +560,7 @@ typedef NS_ENUM(NSInteger, SOHAndroidButtonShape) {
                                                   shape:SOHAndroidButtonShapeRightShoulder];
         self.buttonBack =
             [[SOHAndroidTouchButton alloc] initWithLabel:@"Back"
-                                                 button:kButtonBack
+                                                 button:-1
                                                   shape:SOHAndroidButtonShapeRectangle];
         self.buttonStart =
             [[SOHAndroidTouchButton alloc] initWithLabel:@"Start"

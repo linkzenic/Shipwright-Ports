@@ -97,7 +97,7 @@ index 31b114a93..4ec673018 100644
  
  /* vi: set ts=4 sw=4 expandtab: */
 diff --git a/src/video/uikit/SDL_uikitevents.m b/src/video/uikit/SDL_uikitevents.m
-index 0a96c6821..fcb096a49 100644
+index 0a96c6821..51f42b7a4 100644
 --- a/src/video/uikit/SDL_uikitevents.m
 +++ b/src/video/uikit/SDL_uikitevents.m
 @@ -53,10 +53,13 @@ - (void)eventPumpChanged
@@ -118,6 +118,26 @@ index 0a96c6821..fcb096a49 100644
          [notificationCenter addObserver:self selector:@selector(applicationWillTerminate) name:UIApplicationWillTerminateNotification object:nil];
          [notificationCenter addObserver:self selector:@selector(applicationDidReceiveMemoryWarning) name:UIApplicationDidReceiveMemoryWarningNotification object:nil];
  #if !TARGET_OS_TV
+@@ -145,6 +148,19 @@ touch events to get processed (which is important to get certain
+         result = CFRunLoopRunInMode((CFStringRef)UITrackingRunLoopMode, seconds, TRUE);
+     } while(result == kCFRunLoopRunHandledSource);
+ 
++    /* Scene-backed windows can finish rotating after SDL's fullscreen setup
++     * has cached the initial portrait size. Keep logical coordinates aligned
++     * with the native view, including touch-to-mouse conversion. */
++    for (SDL_Window *window = _this->windows; window; window = window->next) {
++        SDL_WindowData *data = (__bridge SDL_WindowData *)window->driverdata;
++        if (data.uiwindow.windowScene && data.viewcontroller.view) {
++            const CGSize size = data.viewcontroller.view.bounds.size;
++            if (size.width > 0 && size.height > 0) {
++                SDL_SendWindowEvent(window, SDL_WINDOWEVENT_RESIZED, (int)size.width, (int)size.height);
++            }
++        }
++    }
++
+     /* See the comment in the function definition. */
+ #if defined(SDL_VIDEO_OPENGL_ES) || defined(SDL_VIDEO_OPENGL_ES2)
+     UIKit_GL_RestoreCurrentContext();
 diff --git a/src/video/uikit/SDL_uikitwindow.m b/src/video/uikit/SDL_uikitwindow.m
 index 0e0ea0577..114bc45fb 100644
 --- a/src/video/uikit/SDL_uikitwindow.m
