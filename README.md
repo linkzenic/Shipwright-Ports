@@ -82,5 +82,3 @@ Ship of Harkinian is developed by **Harbour Masters and its contributors**, buil
 - [Official website](https://www.shipofharkinian.com/)
 - [Credits](docs/CREDITS.md)
 - [Building instructions](docs/BUILDING.md)
-
-The unified platform integration is currently on the [apple-platform-parity branch](https://github.com/linkzenic/Shipwright-Ports/tree/apple-platform-parity). The default branch will be brought forward as part of release integration.
