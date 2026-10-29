@@ -1,6 +1,7 @@
 #pragma once
 #include <array>
 #include <string>
+#include <cstdint>
 #include "soh/cvar_prefixes.h"
 
 namespace TouchHud {
@@ -10,6 +11,16 @@ enum Action { Disabled, ActionA, SwordB, Target, Shield, Navi, ItemLeft, ItemDow
               ItemRight, ExtraL, FirstPerson, Pause, DpadUp, DpadDown, DpadLeft, DpadRight, ToggleMap, ManualJump,
               Modifier1, Modifier2, ActionCount };
 constexpr int BindingCount = 16;
+inline uint32_t ActionMask(int action, bool paused = false) {
+    constexpr uint32_t masks[] = {0,0x8000,0x4000,0x2000,0x10,0x20000,2,4,1,0x20,8,0x1000,
+                                 0x800,0x400,0x200,0x100,0x10000,0x01000000,0x40,0x80};
+    if (action == Navi && paused) return 8;
+    return action >= 0 && action < ActionCount ? masks[action] : 0;
+}
+inline int ActionSlot(int action) {
+    constexpr int slots[] = {-1,9,0,-1,-1,8,1,2,3,-1,-1,-1,4,5,6,7,-1,-1,-1,-1};
+    return action >= 0 && action < ActionCount ? slots[action] : -1;
+}
 inline constexpr std::array<const char*, BindingCount> Keys = {
     "a", "b", "cl", "cd", "cr", "cu", "z", "l", "r", "du", "dd", "dl", "dr", "start", "fairy", "map"
 };
