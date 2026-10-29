@@ -49,6 +49,12 @@ Validated locally on October 28, 2026:
 Controller interactions and physical Apple TV behavior are not established by
 these automated simulator/HTTP checks.
 
+A separate development-signed preview was subsequently installed on the older
+Apple TV 4K running tvOS 26.6. The game archive and two saves were copied into
+the preview's isolated container and verified. Relaunch reached the animated
+title sequence on hardware. Gameplay, controller navigation, audio, saving and
+suspend/resume still require interactive testing.
+
 ## Release gates
 
 Physical-device testing must cover the advertised LAN URL, browser upload
