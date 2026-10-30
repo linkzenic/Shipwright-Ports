@@ -1,0 +1,46 @@
+name: Publish verified touch hotfix artifacts
+on:
+  push:
+    branches: [release-artifact-publish]
+permissions:
+  actions: read
+  contents: write
+concurrency:
+  group: publish-touch-hotfix-ports-2
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'linkzenic/Shipwright-Ports' && github.actor == 'linkzenic'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: linkzenic/Shipwright-Ports
+    steps:
+      - name: Verify successful source build and draft
+        run: |
+          test "$GITHUB_REPOSITORY" = linkzenic/Shipwright-Ports
+          test "$GITHUB_ACTOR" = linkzenic
+          gh run view 40990340848 --json conclusion,headSha | jq -e '.conclusion == "success" and .headSha == "b4225279893905000cee28fdc84eebfc3ed598c8"'
+          gh release view v9.3.1-ports.2 --json isDraft,targetCommitish | jq -e '.isDraft == true and .targetCommitish == "b4225279893905000cee28fdc84eebfc3ed598c8"'
+      - name: Retrieve existing artifacts within GitHub
+        run: |
+          gh run download 40990340848 --name SOH-9.3.1-Android --dir artifacts/android
+          gh run download 40990340848 --name SOH-9.3.1-iOS --dir artifacts/ios
+          gh release download v9.3.1-ports.1 --pattern '*tvOS*.ipa' --dir artifacts/tvos
+      - name: Verify exact approved binaries
+        run: |
+          echo '99f215007984b06adf0758256d044599f2079825af5e142b1c967215bd6bd267  artifacts/android/soh_release_v9.3.1-android.4.apk' | sha256sum -c -
+          echo '082af5a90a3f7f393d3ef0d2b84882f20c0e13d81a786b8a33f56f657d1a06a5  artifacts/ios/Ship-of-Harkinian-9.3.1-iOS-unsigned.ipa' | sha256sum -c -
+          echo 'bdbf2ef3dc5ea3b76cfdf23138e995245f8143d036f652274445d8b3dd5fdba6  artifacts/tvos/Ship-of-Harkinian-9.3.1-tvOS-unsigned.ipa' | sha256sum -c -
+      - name: Attach verified downloads to draft
+        run: |
+          test "$GITHUB_REPOSITORY" = linkzenic/Shipwright-Ports
+          test "$GITHUB_ACTOR" = linkzenic
+          gh release upload v9.3.1-ports.2 artifacts/android/*.apk artifacts/ios/*.ipa artifacts/tvos/*.ipa --clobber
+      - name: Publish complete release with approved notes
+        run: |
+          test "$GITHUB_REPOSITORY" = linkzenic/Shipwright-Ports
+          test "$GITHUB_ACTOR" = linkzenic
+          gh release view v9.3.1-ports.2 --json assets | jq -e '.assets | length == 3 and all(.[]; .state == "uploaded" and .size > 0)'
+          gh release edit v9.3.1-ports.2 --draft=false --prerelease=false --latest
