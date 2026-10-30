@@ -292,8 +292,8 @@ final class IntegratedTouchView extends View {
         int next = host.integratedTouchState();
         if (next != state) {
             // Icon/action changes affect lettering, not pointer ownership or held input.
-            boolean sceneChanged = ((next ^ state) & 127) != 0;
-            if (((next ^ state) & (8|64)) != 0) bindings = host.integratedTouchBindings(mode);
+            boolean sceneChanged = ((next ^ state) & 255) != 0;
+            if (((next ^ state) & (8|64|128)) != 0) bindings = host.integratedTouchBindings(mode);
             state=next;
             if (sceneChanged) { cancelInputs(); layoutControls(); }
         }

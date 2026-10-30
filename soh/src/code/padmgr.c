@@ -232,6 +232,7 @@ void PadMgr_ProcessInputs(PadMgr* padMgr) {
                 if (i == 0) {
                     input->cur.button |= TouchHud_Buttons();
                     TouchHud_Stick(&input->cur.stick_x, &input->cur.stick_y);
+                    input->cur.button |= TouchHud_RightStick(&input->cur.right_stick_x, &input->cur.right_stick_y);
                 }
 
                 if (GameInteractor_DisableZTargetingActive()) {

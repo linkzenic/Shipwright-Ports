@@ -107,7 +107,7 @@ UIFont* TouchFont(CGFloat size) {
 - (void)tick:(CADisplayLink*)link {
     if(_suspended||self.hidden||!self.window) return;
     int next=TouchHud_GetState();
-    if(((next^_state)&127)!=0) {
+    if(((next^_state)&255)!=0) {
         [self cancelInputs];
         _state=next;TouchHud_GetBindings(_config.style,_bindings.data(),_bindings.size());[self rebuild];
     } else _state=next;

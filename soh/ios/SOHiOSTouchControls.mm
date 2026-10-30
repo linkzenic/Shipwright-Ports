@@ -908,8 +908,10 @@ int SOHiOS_ConsumeMenuToggleRequest(void) {
 
 void SOHiOS_RequestMenuToggle(void) { sTouchControlsMenuToggleRequested.store(true); }
 void SOHiOS_RefreshOverlay(void) { ApplyTouchControlsState(); }
+extern "C" int TouchHud_SetRightStick(int x, int y);
 void SOHiOS_SetCameraStick(float x,float y) {
     if(!std::isfinite(x)||!std::isfinite(y))x=y=0;
+    if(TouchHud_SetRightStick(lround(x*85),lround(-y*85))) x=y=0;
     SetVirtualAxis(kAxisRightX,ClampAxis(std::clamp(x,-1.f,1.f)*SDL_MAX_SINT16));
     SetVirtualAxis(kAxisRightY,ClampAxis(std::clamp(y,-1.f,1.f)*SDL_MAX_SINT16));
 }

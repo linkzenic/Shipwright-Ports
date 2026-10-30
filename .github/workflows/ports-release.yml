@@ -1,8 +1,8 @@
-name: Android iOS tvOS Release Builds
+name: Android and iOS Touch Controls Hotfix
 
 on:
   push:
-    branches: [apple-platform-parity]
+    branches: [touch-controls-hotfix]
   workflow_dispatch:
 
 permissions:
@@ -49,9 +49,6 @@ jobs:
           - platform: iOS
             mode: --device
             app: build-ios-device/soh/Release-iphoneos/Ship of Harkinian.app
-          - platform: tvOS
-            mode: --tvos-device
-            app: build-tvos-device/soh/Release-appletvos/Ship of Harkinian.app
     steps:
       - uses: actions/checkout@v4
         with:
@@ -65,7 +62,7 @@ jobs:
       - name: Build release app
         env:
           SOH_IOS_VERSION: 9.3.1
-          SOH_IOS_BUILD_NUMBER: '20'
+          SOH_IOS_BUILD_NUMBER: '21'
           SOH_IOS_DISPLAY_NAME: Ship of Harkinian
           SOH_ENABLE_ICLOUD: 'OFF'
           DEPLOYMENT_TARGET: '15.0'
@@ -78,6 +75,5 @@ jobs:
           name: SOH-9.3.1-${{ matrix.platform }}
           path: |
             dist/*.ipa
-            docs/APPLE_CLOUD_SIGNING.md
           if-no-files-found: error
           retention-days: 14

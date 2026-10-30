@@ -43,6 +43,12 @@ jobs:
           javac -d "$RUNNER_TEMP/soh-setup-tests" Android/app/src/main/java/com/dishii/soh/ExtractorAssetState.java tests/android_setup/ExtractorAssetStateTest.java
           java -cp "$RUNNER_TEMP/soh-setup-tests" com.dishii.soh.ExtractorAssetStateTest
           python3 tests/bombchu_bowling/run.py
+      - name: Check touch input routing
+        run: |
+          for test in ocarina right_stick bindings; do
+            g++ -std=c++20 -I. -Isoh "tests/android_touch_hud/$test.cpp" -o "$RUNNER_TEMP/touch-$test"
+            "$RUNNER_TEMP/touch-$test"
+          done
       - uses: actions/cache@v4
         with:
           path: |

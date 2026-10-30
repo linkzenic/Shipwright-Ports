@@ -881,6 +881,14 @@ void SohMenu::AddMenuSettings() {
     path.column = SECTION_COLUMN_2;
     AddWidget(path, "Touch Button Assignments", WIDGET_SEPARATOR_TEXT)
         .PreFunc([](WidgetInfo& info) { info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"), 0) == 0; });
+    static const std::map<int32_t,const char*> touchCStickModes = {{0,"C-buttons"},{1,"Camera"}};
+    AddWidget(path,"C-stick Mode",WIDGET_CVAR_COMBOBOX)
+        .CVar(CVAR_SETTING("TouchControls.GameCubeStickCamera"))
+        .PreFunc([](WidgetInfo& info) { info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"),0) != 2; })
+        .Callback([](WidgetInfo&) { SetMobileIntegratedTouch(); })
+        .Options(ComboboxOptions().DefaultIndex(0).ComboMap(touchCStickModes).Tooltip(
+            "C-buttons or camera, never both. Camera requires Free Camera in Controls. "
+            "During ocarina play, follows Right Stick Ocarina Playback."));
     AddWidget(path, "Enable Manual Jump (Experimental)", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("ManualJump"))
         .PreFunc([](WidgetInfo& info) { info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"), 0) == 0; })

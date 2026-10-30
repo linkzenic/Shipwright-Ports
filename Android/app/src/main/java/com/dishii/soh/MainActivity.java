@@ -971,7 +971,11 @@ public class MainActivity extends SDLActivity{
                 mask == 0x100 ? 3 : mask == 0x8000 ? 4 : mask == 0x4000 ? 5 : -1;
         if (direction >= 0) nativeMenuNavKey(direction, down);
     }
+    native boolean integratedRightStick(int x, int y);
     void integratedLook(float x, float y, boolean active) {
+        if (integratedRightStick(active ? Math.round(x*85) : 0, active ? Math.round(-y*85) : 0)) {
+            resetRightTouch(); integratedLookHeld = false; return;
+        }
         if (!active) { integratedLookHeld = false; resetRightTouch(); return; }
         if (mIsAiming) {
             if (!integratedLookHeld) { setItemButtonPulse(); setItemButtonHeld(true); }
